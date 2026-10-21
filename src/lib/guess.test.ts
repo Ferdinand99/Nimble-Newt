@@ -29,6 +29,7 @@ const cases: [string, string, string][] = [
   ["toml", "toml", '[package]\nname = "demo"\nversion = "0.1.0"\n\n[dependencies]\nserde = "1"'],
   ["ini", "ini", "; settings\n[general]\nname=demo\nlevel=3"],
   ["markdown", "markdown", "# Title\n\nSome **bold** text and a [link](http://x.y).\n\n- one\n- two"],
+  ["markdown", "markdown headings only", "# Title\n\ntext here\n\n## Sub\n\nmore text\n"],
   ["log", "log", "2026-01-01 12:00:00 INFO started\n2026-01-01 12:00:01 ERROR failed"],
 ];
 
@@ -36,6 +37,9 @@ describe("guessLanguage", () => {
   for (const [id, name, text] of cases) {
     it(`${name} -> ${id}`, () => expect(guessLanguage(text)).toBe(id));
   }
+  it("does not mistake a lone # comment-like line for Markdown", () => {
+    expect(guessLanguage("# remember to buy milk\nand eggs")).toBeNull();
+  });
   it("returns null for ordinary prose and tiny input", () => {
     expect(guessLanguage("Meeting notes\nbuy milk and call Anna tomorrow")).toBeNull();
     expect(guessLanguage("hi")).toBeNull();

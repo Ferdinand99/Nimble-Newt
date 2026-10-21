@@ -9,6 +9,7 @@ import { addCursorAbove, addCursorBelow, columnSelect } from "./commands";
 import { bookmarkExtension } from "./bookmarks";
 import { createFindPanel } from "./findpanel";
 import { highlightExtension } from "./highlights";
+import { wordCompletion, wordCompletionCompartment } from "./wordCompletion";
 import { recordable, recordingExtension, registerMacroCommand } from "./macroRecorder";
 import { highlighting } from "./theme";
 import { whitespace } from "./whitespace";
@@ -16,6 +17,7 @@ import { whitespace } from "./whitespace";
 export interface ViewOptions {
   wrap: boolean;
   whitespace: boolean;
+  completion: boolean;
   indent: { useTabs: boolean; size: number };
 }
 
@@ -101,6 +103,7 @@ export function dynamicExtensions(o: ViewOptions, lang: Extension = []): Extensi
     compartments.wrap.of(o.wrap ? EditorView.lineWrapping : []),
     compartments.whitespace.of(o.whitespace ? whitespace : []),
     compartments.indent.of(indentExtension(o.indent)),
+    wordCompletionCompartment.of(o.completion ? wordCompletion() : []),
   ];
 }
 
@@ -115,6 +118,7 @@ export function reconfigureEffects(o: ViewOptions) {
     compartments.wrap.reconfigure(o.wrap ? EditorView.lineWrapping : []),
     compartments.whitespace.reconfigure(o.whitespace ? whitespace : []),
     compartments.indent.reconfigure(indentExtension(o.indent)),
+    wordCompletionCompartment.reconfigure(o.completion ? wordCompletion() : []),
   ];
 }
 

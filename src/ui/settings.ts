@@ -1,6 +1,6 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { checkForUpdates } from "../app/updater";
-import { ENCODINGS, EOLS } from "../lib/api";
+import { EOLS, listEncodings } from "../lib/api";
 import { h } from "../lib/dom";
 import { t } from "../lib/i18n";
 import { FONT_MAX, FONT_MIN, settings, type Settings } from "../lib/settings";
@@ -24,9 +24,14 @@ function toggle(key: { [K in keyof Settings]: Settings[K] extends boolean ? K : 
   return h("label", { class: "switch" }, input, h("span", { class: "switch-ui" }));
 }
 
-function select<K extends "defaultEncoding" | "defaultEol">(key: K, values: readonly string[], label: string, text: (v: string) => string = (v) => v): HTMLElement {
+function select<K extends "defaultEncoding" | "defaultEol">(key: K, values: readonly string[], label: string, text: (v: string) => string = (v) => v, groups?: Map<string, string[]>): HTMLElement {
   const sel = h("select", { class: "input", style: "width:auto", "aria-label": label });
-  for (const v of values) sel.append(h("option", { value: v, selected: settings.value[key] === v }, text(v)));
+  const opt = (v: string) => h("option", { value: v, selected: settings.value[key] === v }, text(v));
+  if (groups) {
+    for (const [g, list] of groups) sel.append(h("optgroup", { label: g }, ...list.map(opt)));
+  } else {
+    for (const v of values) sel.append(opt(v));
+  }
   sel.addEventListener("change", () => settings.set({ [key]: sel.value } as Partial<Settings>));
   return sel;
 }
@@ -45,6 +50,12 @@ function stepper(key: "fontSize" | "tabSize", min: number, max: number, label: s
 
 export async function openSettings(): Promise<void> {
   const version = await getVersion().catch(() => "");
+  const encodings = await listEncodings().catch(() => []);
+  const groups = new Map<string, string[]>();
+  for (const e of encodings) {
+    const g = e.group === "Unicode" ? t("enc.group.unicode") : t(`enc.group.${e.group}`);
+    groups.set(g, [...(groups.get(g) ?? []), e.label]);
+  }
   const list = (...rows: HTMLElement[]) => h("ul", { class: "inset-list" }, ...rows);
   const body = [
     h("div", { class: "group-title" }, t("settings.appearance")),
@@ -59,10 +70,11 @@ export async function openSettings(): Promise<void> {
       row(t("settings.tabSize"), stepper("tabSize", 1, 16, t("settings.tabSize"))),
       row(t("settings.wordWrap"), toggle("wordWrap", t("settings.wordWrap"))),
       row(t("settings.showWhitespace"), toggle("showWhitespace", t("settings.showWhitespace"))),
+      row(t("settings.wordCompletion"), toggle("wordCompletion", t("settings.wordCompletion")), t("settings.wordCompletionHint")),
     ),
     h("div", { class: "group-title" }, t("settings.files")),
     list(
-      row(t("settings.defaultEncoding"), select("defaultEncoding", ENCODINGS, t("settings.defaultEncoding")), t("settings.defaultEncodingHint")),
+      row(t("settings.defaultEncoding"), select("defaultEncoding", [], t("settings.defaultEncoding"), undefined, groups.size ? groups : undefined), t("settings.defaultEncodingHint")),
       row(t("settings.defaultEol"), select("defaultEol", EOLS, t("settings.defaultEol"), (v) => t(`eol.${v}`))),
       row(t("settings.restoreSession"), toggle("restoreSession", t("settings.restoreSession")), t("settings.restoreSessionHint")),
     ),

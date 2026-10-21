@@ -6,7 +6,7 @@ import { accelFor, COMMAND_DEFS, matchesAccel } from "./app/commandDefs";
 import { openPalette, runCommand } from "./app/commands";
 import { onUpdateAvailable, showAvailable, startAutoUpdates } from "./app/updater";
 import { workspace } from "./app/workspace";
-import { api, errorMessage } from "./lib/api";
+import { api, errorMessage, listEncodings } from "./lib/api";
 import { isMac } from "./lib/dom";
 import { setLocale, t } from "./lib/i18n";
 import { PathInbox } from "./lib/pathInbox";
@@ -102,6 +102,10 @@ async function boot(): Promise<void> {
 
   onUpdateAvailable((v) => status.setUpdate(v, () => void showAvailable()));
   startAutoUpdates();
+  // A hand-edited or outdated default encoding must not break saving later.
+  void listEncodings().then((list) => {
+    if (!list.some((e) => e.label === settings.value.defaultEncoding)) settings.set({ defaultEncoding: "UTF-8" });
+  }).catch(() => {});
   // Custom languages load after the first paint; open tabs pick them up when they are registered.
   void import("./lib/userLanguageStore").then((m) => m.loadUserLanguages())
     .then(() => workspace.redetectLanguages())

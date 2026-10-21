@@ -1,11 +1,12 @@
 import { toggleRecording } from "../app/macros";
 import { workspace } from "../app/workspace";
 import { recorder } from "../editor/macroRecorder";
-import { ENCODINGS, EOLS, type Encoding } from "../lib/api";
+import { COMMON_ENCODINGS, EOLS } from "../lib/api";
 import { h } from "../lib/dom";
 import { t } from "../lib/i18n";
 import { getLanguage, LANGUAGES } from "../lib/languages";
 import { promptNumber } from "./dialog";
+import { pickEncoding } from "./encodingPick";
 import { showMenu, type MenuEntry } from "./menu";
 import { quickPick } from "./palette";
 
@@ -30,10 +31,15 @@ export function initStatusbar(): StatusHandles {
   const eol = item("eol", (b) => eolMenu(b));
   const rec = item("status-rec", () => toggleRecording());
   rec.hidden = true;
+  const follow = item("status-update", () => {
+    const d = workspace.active;
+    if (d?.follow) workspace.toggleFollow(d);
+  });
+  follow.hidden = true;
   const update = item("status-update", () => updateClick?.());
   update.hidden = true;
   let updateClick: (() => void) | undefined;
-  bar.append(pos, sel, rec, h("span", { class: "spacer" }), update, indent, lang, enc, eol);
+  bar.append(pos, sel, rec, follow, h("span", { class: "spacer" }), update, indent, lang, enc, eol);
 
   const render = () => {
     const d = workspace.active;
@@ -52,6 +58,9 @@ export function initStatusbar(): StatusHandles {
     lang.textContent = getLanguage(d.langId).name;
     enc.textContent = d.encoding;
     eol.textContent = d.eol;
+    follow.hidden = !d.follow;
+    follow.textContent = t("follow.pill");
+    follow.title = t("follow.pillHint");
     pos.title = t("status.gotoLine");
     indent.title = t("status.indentTitle");
     lang.title = t("status.languageTitle");
@@ -98,10 +107,16 @@ export function initStatusbar(): StatusHandles {
   const encodingMenu = (anchor: HTMLElement) => {
     const d = workspace.active;
     if (!d) return;
-    const entries: MenuEntry[] = ENCODINGS.map((e) => ({ label: t("status.convertTo", { enc: e }), checked: d.encoding === e, run: () => workspace.setEncoding(d, e) }));
+    const other = !COMMON_ENCODINGS.includes(d.encoding);
+    const entries: MenuEntry[] = COMMON_ENCODINGS.map((e) => ({ label: t("status.convertTo", { enc: e }), checked: d.encoding === e, run: () => workspace.setEncoding(d, e) }));
+    entries.push({ label: other ? t("status.convertToOtherCurrent", { enc: d.encoding }) : t("status.convertToOther"), checked: other, run: () => void pickEncoding(t("status.convertToOther"), d.encoding).then((e) => {
+          if (e) workspace.setEncoding(d, e);
+        }) });
     if (d.path) {
       entries.push({ separator: true, label: "" });
-      for (const e of ENCODINGS) entries.push({ label: t("status.reopenWith", { enc: e }), run: () => void workspace.reopenWithEncoding(d, e as Encoding) });
+      entries.push({ label: t("status.reopenWithOther"), run: () => void pickEncoding(t("status.reopenWithOther"), d.encoding).then((e) => {
+          if (e) void workspace.reopenWithEncoding(d, e);
+        }) });
     }
     showMenu(entries, anchor);
   };

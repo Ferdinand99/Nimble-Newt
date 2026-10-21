@@ -14,8 +14,12 @@ describe("settings.normalize", () => {
     expect(s.wordWrap).toBe(true);
     expect(s.defaultEol).toBe("CRLF");
   });
+  it("accepts any well-formed encoding label (the backend validates it)", () => {
+    expect(normalize({ defaultEncoding: "Shift_JIS" }).defaultEncoding).toBe("Shift_JIS");
+    expect(normalize({ defaultEncoding: "windows-1251" }).defaultEncoding).toBe("windows-1251");
+  });
   it("rejects unknown enum values", () => {
-    const s = normalize({ theme: "neon", defaultEncoding: "KOI8", locale: "xx" });
+    const s = normalize({ theme: "neon", defaultEncoding: "<script>", locale: "xx" });
     expect(s.theme).toBe("system");
     expect(s.defaultEncoding).toBe("UTF-8");
     expect(s.locale).toBe("auto");

@@ -146,10 +146,6 @@
    "macro": true
   },
   {
-   "id": "edit.sortLines",
-   "macro": true
-  },
-  {
    "id": "view.palette",
    "accel": "CmdOrCtrl+Shift+P"
   },
@@ -288,6 +284,130 @@
   },
   {
    "id": "lang.userLanguages"
+  },
+  {
+   "id": "edit.columnEdit"
+  },
+  {
+   "id": "doc.reopenEncoding"
+  },
+  {
+   "id": "doc.follow"
+  },
+  {
+   "id": "lineop.sortAsc",
+   "macro": true
+  },
+  {
+   "id": "lineop.sortDesc",
+   "macro": true
+  },
+  {
+   "id": "lineop.sortAscCI",
+   "macro": true
+  },
+  {
+   "id": "lineop.sortNumeric",
+   "macro": true
+  },
+  {
+   "id": "lineop.sortNumericDesc",
+   "macro": true
+  },
+  {
+   "id": "lineop.reverse",
+   "macro": true
+  },
+  {
+   "id": "lineop.shuffle",
+   "macro": true
+  },
+  {
+   "id": "lineop.dedupe",
+   "macro": true
+  },
+  {
+   "id": "lineop.dedupeConsecutive",
+   "macro": true
+  },
+  {
+   "id": "lineop.keepDuplicates",
+   "macro": true
+  },
+  {
+   "id": "lineop.removeEmpty",
+   "macro": true
+  },
+  {
+   "id": "lineop.removeBlank",
+   "macro": true
+  },
+  {
+   "id": "lineop.collapseBlank",
+   "macro": true
+  },
+  {
+   "id": "lineop.trimLeading",
+   "macro": true
+  },
+  {
+   "id": "lineop.trimBoth",
+   "macro": true
+  },
+  {
+   "id": "lineop.join",
+   "macro": true
+  },
+  {
+   "id": "lineop.splitAt",
+   "macro": true
+  },
+  {
+   "id": "lineop.numberLines",
+   "macro": true
+  },
+  {
+   "id": "lineop.prefix",
+   "macro": true
+  },
+  {
+   "id": "lineop.suffix",
+   "macro": true
+  },
+  {
+   "id": "lineop.titleCase",
+   "macro": true
+  },
+  {
+   "id": "lineop.sentenceCase",
+   "macro": true
+  },
+  {
+   "id": "lineop.invertCase",
+   "macro": true
+  },
+  {
+   "id": "lineop.camelCase",
+   "macro": true
+  },
+  {
+   "id": "lineop.snakeCase",
+   "macro": true
+  },
+  {
+   "id": "lineop.kebabCase",
+   "macro": true
+  },
+  {
+   "id": "lineop.pascalCase",
+   "macro": true
+  },
+  {
+   "id": "view.outline",
+   "accel": "CmdOrCtrl+Shift+O"
+  },
+  {
+   "id": "view.completion"
   }
  ],
  "menu": [
@@ -328,15 +448,61 @@
     "edit.toggleBlockComment",
     "-",
     {
+     "id": "edit.lineOps",
+     "items": [
+      {
+       "id": "edit.lineSort",
+       "items": [
+        "lineop.sortAsc",
+        "lineop.sortDesc",
+        "lineop.sortAscCI",
+        "lineop.sortNumeric",
+        "lineop.sortNumericDesc",
+        "lineop.reverse",
+        "lineop.shuffle"
+       ]
+      },
+      {
+       "id": "edit.lineClean",
+       "items": [
+        "lineop.dedupe",
+        "lineop.dedupeConsecutive",
+        "lineop.keepDuplicates",
+        "-",
+        "lineop.removeEmpty",
+        "lineop.removeBlank",
+        "lineop.collapseBlank",
+        "-",
+        "lineop.trimLeading",
+        "edit.trimTrailing",
+        "lineop.trimBoth"
+       ]
+      },
+      "-",
+      "lineop.join",
+      "lineop.splitAt",
+      "lineop.numberLines",
+      "lineop.prefix",
+      "lineop.suffix"
+     ]
+    },
+    {
      "id": "edit.caseMenu",
      "items": [
       "edit.upperCase",
-      "edit.lowerCase"
+      "edit.lowerCase",
+      "lineop.titleCase",
+      "lineop.sentenceCase",
+      "lineop.invertCase",
+      "-",
+      "lineop.camelCase",
+      "lineop.snakeCase",
+      "lineop.kebabCase",
+      "lineop.pascalCase"
      ]
     },
-    "edit.trimTrailing",
-    "edit.sortLines",
     "-",
+    "edit.columnEdit",
     "edit.selectNext",
     "edit.addCursorAbove",
     "edit.addCursorBelow"
@@ -386,9 +552,12 @@
    "id": "view",
    "items": [
     "view.palette",
+    "view.outline",
     "-",
     "view.wrap",
     "view.whitespace",
+    "view.completion",
+    "doc.follow",
     "-",
     "view.zoomIn",
     "view.zoomOut",
@@ -403,6 +572,7 @@
    "items": [
     "doc.language",
     "doc.encoding",
+    "doc.reopenEncoding",
     "doc.eol",
     "doc.indent",
     "-",

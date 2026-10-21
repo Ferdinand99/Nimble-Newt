@@ -1,7 +1,7 @@
 //! Platform-independent logic for Nimble Newt: everything that can be tested without a webview.
 
-pub mod encoding;
 pub mod diff;
+pub mod encoding;
 pub mod eol;
 pub mod fileio;
 pub mod search;

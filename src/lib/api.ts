@@ -1,8 +1,18 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 
-export type Encoding = "UTF-8" | "UTF-8 BOM" | "UTF-16 LE" | "UTF-16 BE" | "Windows-1252";
+/** An encoding label such as "UTF-8" or "Shift_JIS"; the full list comes from `api.listEncodings()`. */
+export type Encoding = string;
+export interface EncodingInfo {
+  label: string;
+  group: string;
+}
 export type Eol = "LF" | "CRLF" | "CR";
-export const ENCODINGS: Encoding[] = ["UTF-8", "UTF-8 BOM", "UTF-16 LE", "UTF-16 BE", "Windows-1252"];
+/** Offered directly in menus; everything else is reached through "Other…". */
+export const COMMON_ENCODINGS: Encoding[] = ["UTF-8", "UTF-8 BOM", "UTF-16 LE", "UTF-16 BE", "Windows-1252"];
+
+let encodingList: Promise<EncodingInfo[]> | null = null;
+/** All supported encodings (cached). */
+export const listEncodings = (): Promise<EncodingInfo[]> => (encodingList ??= invoke<EncodingInfo[]>("list_encodings"));
 export const EOLS: Eol[] = ["LF", "CRLF", "CR"];
 
 export interface OpenedFile {

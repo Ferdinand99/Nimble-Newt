@@ -32,7 +32,11 @@ pub struct DiffOptions {
 
 impl Default for DiffOptions {
     fn default() -> Self {
-        Self { whitespace: Whitespace::Exact, ignore_case: false, timeout_ms: 10_000 }
+        Self {
+            whitespace: Whitespace::Exact,
+            ignore_case: false,
+            timeout_ms: 10_000,
+        }
     }
 }
 
@@ -75,7 +79,9 @@ pub fn lines_of(text: &str) -> Vec<&str> {
         return Vec::new();
     }
     let body = text.strip_suffix('\n').unwrap_or(text);
-    body.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l)).collect()
+    body.split('\n')
+        .map(|l| l.strip_suffix('\r').unwrap_or(l))
+        .collect()
 }
 
 fn key(line: &str, o: &DiffOptions) -> String {
@@ -111,22 +117,57 @@ pub fn compare(a: &str, b: &str, o: &DiffOptions) -> Comparison {
     let (ia, ib) = (intern(&la, o, &mut table), intern(&lb, o, &mut table));
     let deadline = Instant::now().checked_add(Duration::from_millis(o.timeout_ms.max(1)));
     let ops = capture_diff_slices_deadline(Algorithm::Myers, &ia, &ib, deadline);
-    let mut out = Comparison { a_lines: la.len(), b_lines: lb.len(), ..Default::default() };
+    let mut out = Comparison {
+        a_lines: la.len(),
+        b_lines: lb.len(),
+        ..Default::default()
+    };
     for op in ops {
         match op {
             DiffOp::Equal { .. } => {}
-            DiffOp::Delete { old_index, old_len, new_index } => {
+            DiffOp::Delete {
+                old_index,
+                old_len,
+                new_index,
+            } => {
                 out.removed_lines += old_len;
-                out.hunks.push(Hunk { kind: HunkKind::Removed, a_start: old_index, a_len: old_len, b_start: new_index, b_len: 0 });
+                out.hunks.push(Hunk {
+                    kind: HunkKind::Removed,
+                    a_start: old_index,
+                    a_len: old_len,
+                    b_start: new_index,
+                    b_len: 0,
+                });
             }
-            DiffOp::Insert { old_index, new_index, new_len } => {
+            DiffOp::Insert {
+                old_index,
+                new_index,
+                new_len,
+            } => {
                 out.added_lines += new_len;
-                out.hunks.push(Hunk { kind: HunkKind::Added, a_start: old_index, a_len: 0, b_start: new_index, b_len: new_len });
+                out.hunks.push(Hunk {
+                    kind: HunkKind::Added,
+                    a_start: old_index,
+                    a_len: 0,
+                    b_start: new_index,
+                    b_len: new_len,
+                });
             }
-            DiffOp::Replace { old_index, old_len, new_index, new_len } => {
+            DiffOp::Replace {
+                old_index,
+                old_len,
+                new_index,
+                new_len,
+            } => {
                 out.removed_lines += old_len;
                 out.added_lines += new_len;
-                out.hunks.push(Hunk { kind: HunkKind::Changed, a_start: old_index, a_len: old_len, b_start: new_index, b_len: new_len });
+                out.hunks.push(Hunk {
+                    kind: HunkKind::Changed,
+                    a_start: old_index,
+                    a_len: old_len,
+                    b_start: new_index,
+                    b_len: new_len,
+                });
             }
         }
     }
@@ -136,7 +177,11 @@ pub fn compare(a: &str, b: &str, o: &DiffOptions) -> Comparison {
 }
 
 /// Reads two files (any supported encoding) and compares them. Returns the line ending of each.
-pub fn compare_files(a: &std::path::Path, b: &std::path::Path, o: &DiffOptions) -> Result<(Comparison, Eol, Eol)> {
+pub fn compare_files(
+    a: &std::path::Path,
+    b: &std::path::Path,
+    o: &DiffOptions,
+) -> Result<(Comparison, Eol, Eol)> {
     let fa = crate::fileio::read(a, Eol::Lf)?;
     let fb = crate::fileio::read(b, Eol::Lf)?;
     Ok((compare(&fa.text, &fb.text, o), fa.eol, fb.eol))
@@ -144,7 +189,12 @@ pub fn compare_files(a: &std::path::Path, b: &std::path::Path, o: &DiffOptions) 
 
 /// The lines `[start, start + len)` of `text`, for showing a hunk.
 pub fn slice_lines(text: &str, start: usize, len: usize) -> Vec<String> {
-    lines_of(text).into_iter().skip(start).take(len).map(str::to_owned).collect()
+    lines_of(text)
+        .into_iter()
+        .skip(start)
+        .take(len)
+        .map(str::to_owned)
+        .collect()
 }
 
 #[cfg(test)]
@@ -168,23 +218,77 @@ mod tests {
         let c = cmp("a\nb\nc\n", "a\nx\nb\nc\nd\n");
         assert_eq!(c.added_lines, 2);
         assert_eq!(c.removed_lines, 0);
-        assert_eq!(c.hunks[0], Hunk { kind: HunkKind::Added, a_start: 1, a_len: 0, b_start: 1, b_len: 1 });
-        assert_eq!(c.hunks[1], Hunk { kind: HunkKind::Added, a_start: 3, a_len: 0, b_start: 4, b_len: 1 });
+        assert_eq!(
+            c.hunks[0],
+            Hunk {
+                kind: HunkKind::Added,
+                a_start: 1,
+                a_len: 0,
+                b_start: 1,
+                b_len: 1
+            }
+        );
+        assert_eq!(
+            c.hunks[1],
+            Hunk {
+                kind: HunkKind::Added,
+                a_start: 3,
+                a_len: 0,
+                b_start: 4,
+                b_len: 1
+            }
+        );
 
         let d = cmp("a\nb\nc\n", "a\nc\n");
-        assert_eq!(d.hunks, vec![Hunk { kind: HunkKind::Removed, a_start: 1, a_len: 1, b_start: 1, b_len: 0 }]);
+        assert_eq!(
+            d.hunks,
+            vec![Hunk {
+                kind: HunkKind::Removed,
+                a_start: 1,
+                a_len: 1,
+                b_start: 1,
+                b_len: 0
+            }]
+        );
 
         let r = cmp("a\nb\nc\n", "a\nB\nc\n");
-        assert_eq!(r.hunks, vec![Hunk { kind: HunkKind::Changed, a_start: 1, a_len: 1, b_start: 1, b_len: 1 }]);
+        assert_eq!(
+            r.hunks,
+            vec![Hunk {
+                kind: HunkKind::Changed,
+                a_start: 1,
+                a_len: 1,
+                b_start: 1,
+                b_len: 1
+            }]
+        );
         assert_eq!((r.added_lines, r.removed_lines), (1, 1));
     }
 
     #[test]
     fn whole_file_vs_empty() {
         let c = cmp("a\nb\n", "");
-        assert_eq!(c.hunks, vec![Hunk { kind: HunkKind::Removed, a_start: 0, a_len: 2, b_start: 0, b_len: 0 }]);
+        assert_eq!(
+            c.hunks,
+            vec![Hunk {
+                kind: HunkKind::Removed,
+                a_start: 0,
+                a_len: 2,
+                b_start: 0,
+                b_len: 0
+            }]
+        );
         let d = cmp("", "a\nb\n");
-        assert_eq!(d.hunks, vec![Hunk { kind: HunkKind::Added, a_start: 0, a_len: 0, b_start: 0, b_len: 2 }]);
+        assert_eq!(
+            d.hunks,
+            vec![Hunk {
+                kind: HunkKind::Added,
+                a_start: 0,
+                a_len: 0,
+                b_start: 0,
+                b_len: 2
+            }]
+        );
     }
 
     #[test]
@@ -195,7 +299,11 @@ mod tests {
 
     #[test]
     fn whitespace_and_case_options() {
-        let o = |w, c| DiffOptions { whitespace: w, ignore_case: c, ..Default::default() };
+        let o = |w, c| DiffOptions {
+            whitespace: w,
+            ignore_case: c,
+            ..Default::default()
+        };
         assert!(!compare("a  b\n", "a b\n", &o(Whitespace::Exact, false)).identical);
         assert!(compare("a  b\n", "ab\n", &o(Whitespace::All, false)).identical);
         assert!(compare("  a\t\n", "a\n", &o(Whitespace::Edges, false)).identical);
@@ -234,7 +342,11 @@ mod tests {
         }
         let start = Instant::now();
         let c = cmp(&a, &b);
-        assert!(start.elapsed() < Duration::from_secs(5), "took {:?}", start.elapsed());
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "took {:?}",
+            start.elapsed()
+        );
         assert_eq!(c.removed_lines, 20 + 8);
         assert_eq!(c.added_lines, 20);
         assert!(!c.timed_out);

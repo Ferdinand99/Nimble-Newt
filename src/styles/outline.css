@@ -1,0 +1,95 @@
+/* Outline panel (function list). Tokens only. */
+.outline {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  color: var(--text);
+}
+.outline-head {
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--line);
+}
+.outline-filter {
+  width: 100%;
+}
+.outline-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: var(--sp-1);
+  overflow: auto;
+  list-style: none;
+}
+.outline-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px var(--sp-2);
+  padding-inline-start: calc(var(--sp-2) + var(--lvl, 0) * var(--sp-4));
+  border-radius: var(--r-xs);
+  font-size: 0.8125rem;
+  cursor: default;
+  user-select: none;
+}
+.outline-item:hover {
+  background: var(--hover);
+}
+.outline-item[aria-selected="true"] {
+  background: var(--brand-fill);
+  box-shadow: inset 0 0 0 1px var(--brand-ring);
+}
+.outline-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+.k-function .outline-icon,
+.k-method .outline-icon {
+  color: var(--syn-function);
+}
+.k-class .outline-icon,
+.k-struct .outline-icon,
+.k-interface .outline-icon,
+.k-trait .outline-icon,
+.k-enum .outline-icon,
+.k-type .outline-icon {
+  color: var(--syn-type);
+}
+.k-heading .outline-icon,
+.k-section .outline-icon {
+  color: var(--brand);
+}
+.outline-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-heading .outline-name {
+  font-weight: 600;
+}
+.outline-line {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+.outline-empty {
+  margin: 0;
+  padding: var(--sp-4);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+.outline-empty[hidden] {
+  display: none;
+}
+@media (forced-colors: active) {
+  .outline-item[aria-selected="true"] {
+    outline: 2px solid Highlight;
+  }
+}

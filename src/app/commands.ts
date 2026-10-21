@@ -1,4 +1,5 @@
 import { copyLineDown, deleteLine, moveLineDown, moveLineUp, redo, selectAll, toggleBlockComment, toggleComment, undo } from "@codemirror/commands";
+import { EditorSelection } from "@codemirror/state";
 import { findNext, findPrevious, getSearchQuery, openSearchPanel, selectNextOccurrence } from "@codemirror/search";
 import type { EditorView } from "@codemirror/view";
 import { addBookmarkLines, bookmarkedLines, bookmarkedText, clearBookmarks, invertBookmarks, jumpBookmark, removeLines, toggleBookmarkAt } from "../editor/bookmarks";
@@ -6,11 +7,15 @@ import { addCursorAbove, addCursorBelow } from "../editor/commands";
 import { clearHighlights, textToHighlight, toggleHighlight } from "../editor/highlights";
 import { recorder } from "../editor/macroRecorder";
 import { requestReplaceRow } from "../editor/findpanel";
-import { ENCODINGS, EOLS } from "../lib/api";
+import { EOLS } from "../lib/api";
+import { pickEncoding } from "../ui/encodingPick";
 import { isMac } from "../lib/dom";
 import { t } from "../lib/i18n";
 import { dirname, formatShortcut } from "../lib/logic";
 import { FONT_MAX, FONT_MIN, settings } from "../lib/settings";
+import { askColumnEdit } from "../ui/columnEdit";
+import { lineOpHandlers } from "./lineOpsCommands";
+import { togglePanel } from "./panels";
 import { promptNumber } from "../ui/dialog";
 import { openFindInFiles } from "../ui/fif";
 import { showMenu } from "../ui/menu";
@@ -28,26 +33,6 @@ const cm = (cmd: (v: EditorView) => boolean) => () => {
   cmd(view());
   workspace.focus();
 };
-
-function transformSelection(fn: (s: string) => string): void {
-  const v = view();
-  v.dispatch(v.state.changeByRange((r) => {
-    if (r.empty) return { range: r };
-    const text = fn(v.state.sliceDoc(r.from, r.to));
-    return { changes: { from: r.from, to: r.to, insert: text }, range: { from: r.from, to: r.from + text.length } as never };
-  }));
-}
-
-function sortLines(): void {
-  const v = view();
-  const st = v.state;
-  const m = st.selection.main;
-  const from = st.doc.lineAt(m.empty ? 0 : m.from).from;
-  const to = st.doc.lineAt(m.empty ? st.doc.length : m.to).to;
-  const lines = st.sliceDoc(from, to).split("\n");
-  lines.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  v.dispatch({ changes: { from, to, insert: lines.join("\n") } });
-}
 
 function trimTrailing(): void {
   const v = view();
@@ -86,6 +71,22 @@ async function pick<T extends string>(title: string, values: readonly T[], label
 }
 
 const active = () => workspace.active;
+
+/** Column edit: inserts text or a number sequence at every cursor / column-selection line. */
+async function columnEdit(): Promise<void> {
+  const v = view();
+  const ranges = v.state.selection.ranges;
+  const values = await askColumnEdit(ranges.length);
+  if (!values) return;
+  v.dispatch(
+    v.state.changeByRange((r) => {
+      const insert = values[ranges.indexOf(r)] ?? "";
+      return { changes: { from: r.from, to: r.to, insert }, range: EditorSelection.cursor(r.from + insert.length) };
+    }),
+    { userEvent: "input" },
+  );
+  workspace.focus();
+}
 
 async function copyBookmarked(cut: boolean): Promise<void> {
   const v = view();
@@ -146,23 +147,34 @@ const handlers: Record<string, () => void | Promise<void>> = {
   "edit.selectNext": cm(selectNextOccurrence),
   "edit.addCursorAbove": cm(addCursorAbove),
   "edit.addCursorBelow": cm(addCursorBelow),
-  "edit.upperCase": () => transformSelection((s) => s.toUpperCase()),
-  "edit.lowerCase": () => transformSelection((s) => s.toLowerCase()),
+  "edit.columnEdit": columnEdit,
   "edit.trimTrailing": trimTrailing,
-  "edit.sortLines": sortLines,
+  ...lineOpHandlers,
   "view.palette": () => openPalette(),
   "view.wrap": () => settings.set({ wordWrap: !settings.value.wordWrap }),
+  "view.completion": () => settings.set({ wordCompletion: !settings.value.wordCompletion }),
   "view.whitespace": () => settings.set({ showWhitespace: !settings.value.showWhitespace }),
   "view.zoomIn": () => zoom(1),
   "view.zoomOut": () => zoom(-1),
   "view.zoomReset": () => zoom(null),
+  "view.outline": () => togglePanel("outline"),
   "view.nextTab": () => workspace.nextTab(1),
   "view.prevTab": () => workspace.nextTab(-1),
   "view.themeSystem": () => settings.set({ theme: "system" }),
   "view.themeLight": () => settings.set({ theme: "light" }),
   "view.themeDark": () => settings.set({ theme: "dark" }),
+  "doc.follow": () => void (active() && workspace.toggleFollow(active()!)),
   "doc.language": () => pick(t("status.selectLanguage"), LANGUAGES.map((l) => l.id), (id) => LANGUAGES.find((l) => l.id === id)!.name, (id) => void (active() && workspace.setLanguage(active()!, id))),
-  "doc.encoding": () => pick(t("cmd.doc.encoding"), ENCODINGS, (e) => e, (e) => active() && workspace.setEncoding(active()!, e)),
+  "doc.encoding": async () => {
+    const d = active();
+    const e = d && (await pickEncoding(t("cmd.doc.encoding"), d.encoding));
+    if (d && e) workspace.setEncoding(d, e);
+  },
+  "doc.reopenEncoding": async () => {
+    const d = active();
+    const e = d?.path && (await pickEncoding(t("cmd.doc.reopenEncoding"), d.encoding));
+    if (d && e) await workspace.reopenWithEncoding(d, e);
+  },
   "doc.eol": () => pick(t("cmd.doc.eol"), EOLS, (e) => t(`eol.${e}`), (e) => active() && workspace.setEol(active()!, e)),
   "doc.indent": () => {
     const d = active();

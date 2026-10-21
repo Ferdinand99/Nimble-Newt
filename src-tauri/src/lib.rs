@@ -145,6 +145,24 @@ async fn doc_write(store: State<'_, SessionStore>, name: String, json: String) -
     store.write_doc(&name, &json).map_err(err)
 }
 
+#[derive(Serialize)]
+struct EncodingInfo {
+    label: &'static str,
+    group: &'static str,
+}
+
+/// Every encoding the editor can read and write, for the pickers.
+#[tauri::command]
+fn list_encodings() -> Vec<EncodingInfo> {
+    nimble_core::encoding::all()
+        .into_iter()
+        .map(|e| EncodingInfo {
+            label: e.label(),
+            group: e.group(),
+        })
+        .collect()
+}
+
 // ---- user-defined languages ------------------------------------------------
 
 /// Validates a JSON or TOML definition and returns it normalised as JSON.
@@ -431,6 +449,7 @@ pub fn run() {
             parse_language_definition,
             serialize_language_definition,
             language_template,
+            list_encodings,
             replace_in_folder,
             take_pending_paths,
             set_locale,

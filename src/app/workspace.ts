@@ -41,6 +41,8 @@ export interface Doc {
   written: Text | null;
   /** Bookmarked lines, kept here while the tab's editor state is not loaded. */
   bookmarks: number[];
+  /** Reload automatically when the file grows or changes on disk, and stay at the end (like `tail -f`). */
+  follow: boolean;
 }
 
 export type ChangeKind = "tabs" | "active" | "doc" | "selection" | "settings";
@@ -68,6 +70,8 @@ export class Workspace {
   private listeners = new Set<Listener>();
   private optionsVersion = 1;
   private checking = false;
+  private followTimer: number | undefined;
+  private following = false;
   private lastSelectionPersist = 0;
 
   readonly persist = debounce(() => void this.persistNow(), 500);
@@ -90,6 +94,7 @@ export class Workspace {
     return {
       wrap: s.wordWrap,
       whitespace: s.showWhitespace,
+      completion: s.wordCompletion,
       indent: indent ?? { useTabs: !s.insertSpaces, size: s.tabSize },
     };
   }
@@ -99,7 +104,7 @@ export class Workspace {
     onEditorUpdate((u) => this.onUpdate(u));
     this.view.scrollDOM.addEventListener("scroll", () => this.persist(), { passive: true });
     settings.onChange((_s, changed) => {
-      if (changed.some((k) => k === "wordWrap" || k === "showWhitespace" || k === "tabSize" || k === "insertSpaces")) {
+      if (changed.some((k) => k === "wordWrap" || k === "showWhitespace" || k === "wordCompletion" || k === "tabSize" || k === "insertSpaces")) {
         this.optionsVersion++;
         this.applyOptions(this.active);
         this.emit("settings");
@@ -189,6 +194,7 @@ export class Workspace {
       optionsVersion: this.optionsVersion,
       written: null,
       bookmarks: p.bookmarks ?? [],
+      follow: false,
     };
     if (doc.bookmarks.length) doc.state = state.update({ effects: setBookmarkEffect(doc.bookmarks) }).state;
     return doc;
@@ -324,6 +330,66 @@ export class Workspace {
   }
 
   /** Re-detects the language of open files, e.g. after custom languages were registered. */
+  /** Turns "follow file" on or off for a tab. A followed file is reloaded when it changes and the view stays at its end. */
+  toggleFollow(doc: Doc): void {
+    if (!doc.path) {
+      toast(t("follow.needsFile"), "info");
+      return;
+    }
+    doc.follow = !doc.follow;
+    if (doc.follow) {
+      if (this.isDirty(doc)) {
+        doc.follow = false;
+        toast(t("follow.unsaved"), "warning");
+        return;
+      }
+      this.scrollToEnd(doc);
+      this.followTimer ??= window.setInterval(() => void this.followTick(), 1000);
+    }
+    if (!this.docs.some((d) => d.follow) && this.followTimer !== undefined) {
+      clearInterval(this.followTimer);
+      this.followTimer = undefined;
+    }
+    this.emit("doc");
+  }
+
+  private scrollToEnd(doc: Doc): void {
+    if (doc.id !== this.activeId) return;
+    const end = this.view.state.doc.length;
+    this.view.dispatch({ selection: EditorSelection.cursor(end), effects: EditorView.scrollIntoView(end, { y: "end" }) });
+  }
+
+  private async followTick(): Promise<void> {
+    if (this.following) return;
+    this.following = true;
+    try {
+      const docs = this.docs.filter((d) => d.follow && d.path && d.state);
+      if (!docs.length) return;
+      const mtimes = await api.fileMtimes(docs.map((d) => d.path!));
+      for (let i = 0; i < docs.length; i++) {
+        const doc = docs[i];
+        const m = mtimes[i];
+        if (m === null || m === doc.savedMtime) continue;
+        if (this.isDirty(doc)) {
+          doc.follow = false;
+          toast(t("follow.stoppedUnsaved", { name: doc.title }), "warning");
+          this.emit("doc");
+          continue;
+        }
+        try {
+          this.replaceContents(doc, await api.openFile(doc.path!, settings.value.defaultEol));
+          this.scrollToEnd(doc);
+        } catch (e) {
+          doc.follow = false;
+          toast(`${doc.title}: ${errorMessage(e)}`, "error");
+          this.emit("doc");
+        }
+      }
+    } finally {
+      this.following = false;
+    }
+  }
+
   async redetectLanguages(): Promise<void> {
     for (const d of this.docs) {
       if (!d.path || d.langManual) continue;
@@ -604,6 +670,7 @@ export class Workspace {
         const doc = cand[i];
         const m = mtimes[i];
         if (!this.docs.includes(doc)) continue;
+        if (doc.follow && m !== null && !this.isDirty(doc)) continue; // the follow timer reloads it
         if (m === null) {
           if (!doc.missing) {
             doc.missing = true;
