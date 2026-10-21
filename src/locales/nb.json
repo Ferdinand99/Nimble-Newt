@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Endre teksten i den åpne fanen",
  "ext.perm.ui": "Vise meldinger og be deg om input",
  "ext.perm.clipboard": "Legge tekst på utklippstavlen",
- "ext.perm.storage": "Lagre litt egne data"
+ "ext.perm.storage": "Lagre litt egne data",
+ "lossy.title": "Noen tegn passer ikke i {encoding}",
+ "lossy.message": "«{name}» har tegn som {encoding} ikke kan representere. Hvis du lagrer som den er, blir de erstattet med «?».",
+ "lossy.utf8": "Lagre som UTF-8",
+ "lossy.anyway": "Lagre likevel"
 }

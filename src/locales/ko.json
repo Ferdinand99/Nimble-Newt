@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "열린 탭의 텍스트 변경",
  "ext.perm.ui": "메시지 표시 및 입력 요청",
  "ext.perm.clipboard": "클립보드에 텍스트 복사",
- "ext.perm.storage": "자체 데이터를 소량 저장"
+ "ext.perm.storage": "자체 데이터를 소량 저장",
+ "lossy.title": "일부 문자는 {encoding}에 맞지 않아요",
+ "lossy.message": "“{name}”에 {encoding}에서 표현할 수 없는 문자가 있어요. 그대로 저장하면 “?”로 바뀌어요.",
+ "lossy.utf8": "UTF-8로 저장",
+ "lossy.anyway": "그래도 저장"
 }

@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Modifică textul din fila deschisă",
  "ext.perm.ui": "Afișează mesaje și îți cere date",
  "ext.perm.clipboard": "Pune text în clipboard",
- "ext.perm.storage": "Păstrează o cantitate mică de date proprii"
+ "ext.perm.storage": "Păstrează o cantitate mică de date proprii",
+ "lossy.title": "Unele caractere nu încap în {encoding}",
+ "lossy.message": "„{name}” conține caractere pe care {encoding} nu le poate reprezenta. Dacă îl salvezi așa cum este, vor fi înlocuite cu „?”.",
+ "lossy.utf8": "Salvează ca UTF-8",
+ "lossy.anyway": "Salvează oricum"
 }

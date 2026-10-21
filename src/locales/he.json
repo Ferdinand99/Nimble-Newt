@@ -50,7 +50,7 @@
  "tab.untitled": "ללא שם",
  "tab.modified": "שונה",
  "tab.close": "סגירת לשונית",
- "tab.closeRight": "סגירת הלשוניות מימין",
+ "tab.closeRight": "סגירת הלשוניות שאחרי זו",
  "tab.copyPath": "העתקת נתיב",
  "toast.pathCopied": "הנתיב הועתק",
  "toast.lossyOpen": "הקובץ “{name}” מכיל בייטים שלא ניתן לפענח; הם הוחלפו ב-�.",
@@ -426,8 +426,8 @@
  "compare.title": "השוואה",
  "compare.identical": "הקבצים זהים.",
  "compare.differences": "{n} הבדלים",
- "compare.moveRight": "העברת שינויים: שמאל ← ימין",
- "compare.moveLeft": "העברת שינויים: ימין ← שמאל",
+ "compare.moveRight": "העברת שינויים: מהראשון לשני",
+ "compare.moveLeft": "העברת שינויים: מהשני לראשון",
  "compare.previous": "הקודם",
  "compare.next": "הבא",
  "compare.close": "סגירה",
@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "שינוי הטקסט של הלשונית הפתוחה",
  "ext.perm.ui": "הצגת הודעות ובקשת קלט",
  "ext.perm.clipboard": "הכנסת טקסט ללוח",
- "ext.perm.storage": "שמירת כמות קטנה של נתונים משלו"
+ "ext.perm.storage": "שמירת כמות קטנה של נתונים משלו",
+ "lossy.title": "חלק מהתווים אינם נכנסים ב-{encoding}",
+ "lossy.message": "ב-“{name}” יש תווים ש-{encoding} אינו יכול לייצג. שמירה כפי שהוא תחליף אותם ב-“?”.",
+ "lossy.utf8": "שמירה כ-UTF-8",
+ "lossy.anyway": "שמירה בכל זאת"
 }

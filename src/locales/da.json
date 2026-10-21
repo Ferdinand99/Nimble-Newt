@@ -110,7 +110,7 @@
  "fif.confirmMessage": "Dette erstatter {matches} match i {files} filer på disken. Det kan ikke fortrydes.",
  "fif.confirmOk": "Erstat alle",
  "fif.replaced": "{n} match erstattet i {files} filer",
- "status.pos": "Ln {line}, Kol {col}",
+ "status.pos": "Lin. {line}, kol. {col}",
  "status.cursors": "{n} markører",
  "status.selected": "{chars} tegn, {lines} linjer",
  "status.tabs": "Tabulatorer: {n}",
@@ -495,7 +495,7 @@
  "large.indexing": "Indekserer {pct} % · ca. {n} linjer",
  "large.notIndexed": "Denne del af filen er ikke indekseret endnu ({pct} %). Den vises, når indekseringen når hertil.",
  "large.cut": "… (linjen er afkortet)",
- "large.pos": "Ln {line} af {total}",
+ "large.pos": "Lin. {line} af {total}",
  "large.readOnlyShort": "Skrivebeskyttet",
  "large.readOnly": "Store filer er skrivebeskyttede.",
  "large.notAvailable": "Den kommando er ikke tilgængelig i fremviseren til store filer.",
@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Ændre teksten i den åbne fane",
  "ext.perm.ui": "Vise beskeder og bede dig om input",
  "ext.perm.clipboard": "Lægge tekst på udklipsholderen",
- "ext.perm.storage": "Gemme en lille mængde egne data"
+ "ext.perm.storage": "Gemme en lille mængde egne data",
+ "lossy.title": "Nogle tegn passer ikke i {encoding}",
+ "lossy.message": "»{name}« har tegn, som {encoding} ikke kan vise. Hvis du gemmer som den er, bliver de erstattet med »?«.",
+ "lossy.utf8": "Gem som UTF-8",
+ "lossy.anyway": "Gem alligevel"
 }

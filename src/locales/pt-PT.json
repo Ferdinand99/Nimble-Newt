@@ -55,14 +55,14 @@
  "toast.pathCopied": "Caminho copiado",
  "toast.lossyOpen": "{name} contém bytes que não puderam ser descodificados; eles foram substituídos por �.",
  "toast.lossySave": "Alguns caracteres não podem ser representados em {encoding} e foram substituídos por “?”.",
- "toast.saveFailed": "Não foi possível guardadar {name}: {error}",
+ "toast.saveFailed": "Não foi possível guardar {name}: {error}",
  "toast.deleted": "{name} foi eliminado do disco. Ao guardar, será recriado.",
  "toast.trimmed": "Espaços no fim removidos em {n} linhas",
  "dialog.open": "Abrir ficheiros",
  "dialog.saveAs": "Guardar como",
  "close.title": "Guardar as alterações em “{name}”?",
  "close.message": "As suas alterações serão perdidas se não as guardar.",
- "close.discard": "Não guardadar",
+ "close.discard": "Não guardar",
  "quit.title": "Sair com alterações não guardadas?",
  "quit.message": "{n} separador(es) com alterações por guardar e o restauro de sessão está desativado.",
  "quit.saveAll": "Guardar tudo",
@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Alterar o texto do separador aberto",
  "ext.perm.ui": "Mostrar mensagens e pedir-lhe informações",
  "ext.perm.clipboard": "Colocar texto na área de transferência",
- "ext.perm.storage": "Guardar uma pequena quantidade de dados próprios"
+ "ext.perm.storage": "Guardar uma pequena quantidade de dados próprios",
+ "lossy.title": "Alguns caracteres não cabem em {encoding}",
+ "lossy.message": "“{name}” tem caracteres que {encoding} não consegue representar. Guardar tal como está vai substituí-los por “?”.",
+ "lossy.utf8": "Guardar como UTF-8",
+ "lossy.anyway": "Guardar mesmo assim"
 }

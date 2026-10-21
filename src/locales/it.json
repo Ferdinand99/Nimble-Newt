@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Modificare il testo della scheda aperta",
  "ext.perm.ui": "Mostrare messaggi e chiederti dati",
  "ext.perm.clipboard": "Mettere testo negli appunti",
- "ext.perm.storage": "Conservare una piccola quantità di dati propri"
+ "ext.perm.storage": "Conservare una piccola quantità di dati propri",
+ "lossy.title": "Alcuni caratteri non rientrano in {encoding}",
+ "lossy.message": "«{name}» contiene caratteri che {encoding} non può rappresentare. Se lo salvi così com'è, verranno sostituiti con “?”.",
+ "lossy.utf8": "Salva come UTF-8",
+ "lossy.anyway": "Salva comunque"
 }

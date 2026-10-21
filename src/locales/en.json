@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Change the text of the open tab",
  "ext.perm.ui": "Show messages and ask you for input",
  "ext.perm.clipboard": "Put text on the clipboard",
- "ext.perm.storage": "Keep a small amount of its own data"
+ "ext.perm.storage": "Keep a small amount of its own data",
+ "lossy.title": "Some characters don't fit in {encoding}",
+ "lossy.message": "“{name}” has characters that {encoding} can't represent. Saving it as is would replace them with “?”.",
+ "lossy.utf8": "Save as UTF-8",
+ "lossy.anyway": "Save anyway"
 }

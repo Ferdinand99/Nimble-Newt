@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Açık sekmenin metnini değiştir",
  "ext.perm.ui": "İletileri göster ve sizden girdi iste",
  "ext.perm.clipboard": "Panoya metin koy",
- "ext.perm.storage": "Küçük miktarda kendi verisini sakla"
+ "ext.perm.storage": "Küçük miktarda kendi verisini sakla",
+ "lossy.title": "Bazı karakterler {encoding} kodlamasına sığmıyor",
+ "lossy.message": "“{name}” dosyasında {encoding} kodlamasının gösteremediği karakterler var. Olduğu gibi kaydedersen bu karakterler “?” ile değiştirilir.",
+ "lossy.utf8": "UTF-8 olarak kaydet",
+ "lossy.anyway": "Yine de kaydet"
 }

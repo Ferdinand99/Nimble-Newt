@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Ändra texten i den öppna fliken",
  "ext.perm.ui": "Visa meddelanden och be dig om indata",
  "ext.perm.clipboard": "Lägga text i urklipp",
- "ext.perm.storage": "Spara en liten mängd egna data"
+ "ext.perm.storage": "Spara en liten mängd egna data",
+ "lossy.title": "Vissa tecken ryms inte i {encoding}",
+ "lossy.message": "”{name}” innehåller tecken som {encoding} inte kan representera. Om du sparar som det är ersätts de med ”?”.",
+ "lossy.utf8": "Spara som UTF-8",
+ "lossy.anyway": "Spara ändå"
 }

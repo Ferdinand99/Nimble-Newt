@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "更改已打开标签页的文本",
  "ext.perm.ui": "显示信息并请求你输入",
  "ext.perm.clipboard": "将文本放入剪贴板",
- "ext.perm.storage": "保存少量自己的数据"
+ "ext.perm.storage": "保存少量自己的数据",
+ "lossy.title": "部分字符无法用{encoding}表示",
+ "lossy.message": "“{name}”包含{encoding}无法表示的字符。按原样保存会将它们替换为“?”。",
+ "lossy.utf8": "保存为 UTF-8",
+ "lossy.anyway": "仍然保存"
 }

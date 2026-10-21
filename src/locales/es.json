@@ -110,7 +110,7 @@
  "fif.confirmMessage": "Se reemplazarán {matches} coincidencias en {files} archivos del disco. No se puede deshacer.",
  "fif.confirmOk": "Reemplazar todo",
  "fif.replaced": "Se reemplazaron {n} coincidencias en {files} archivos",
- "status.pos": "Ln {line}, Col {col}",
+ "status.pos": "Lín. {line}, Col. {col}",
  "status.cursors": "{n} cursores",
  "status.selected": "{chars} caracteres, {lines} líneas",
  "status.tabs": "Tabulaciones: {n}",
@@ -495,7 +495,7 @@
  "large.indexing": "Indexando {pct} % · unas {n} líneas",
  "large.notIndexed": "Esta parte del archivo aún no se ha indexado ({pct} %). Aparecerá cuando la indexación llegue hasta aquí.",
  "large.cut": "… (línea cortada)",
- "large.pos": "Ln {line} de {total}",
+ "large.pos": "Lín. {line} de {total}",
  "large.readOnlyShort": "Solo lectura",
  "large.readOnly": "Los archivos grandes son de solo lectura.",
  "large.notAvailable": "Ese comando no está disponible en el visor de archivos grandes.",
@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Cambiar el texto de la pestaña abierta",
  "ext.perm.ui": "Mostrar mensajes y pedirte datos",
  "ext.perm.clipboard": "Colocar texto en el portapapeles",
- "ext.perm.storage": "Guardar una pequeña cantidad de datos propios"
+ "ext.perm.storage": "Guardar una pequeña cantidad de datos propios",
+ "lossy.title": "Algunos caracteres no caben en {encoding}",
+ "lossy.message": "«{name}» tiene caracteres que {encoding} no puede representar. Si lo guardas tal cual, se sustituirán por «?».",
+ "lossy.utf8": "Guardar como UTF-8",
+ "lossy.anyway": "Guardar de todos modos"
 }

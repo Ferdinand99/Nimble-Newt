@@ -50,7 +50,7 @@
  "tab.untitled": "بدون عنوان",
  "tab.modified": "تغییریافته",
  "tab.close": "بستن زبانه",
- "tab.closeRight": "بستن زبانه‌های سمت راست",
+ "tab.closeRight": "بستن زبانه‌های بعد از این",
  "tab.copyPath": "رونوشت از مسیر",
  "toast.pathCopied": "مسیر کپی شد",
  "toast.lossyOpen": "{name} بایت‌هایی دارد که رمزگشایی نشدند و با � جایگزین شدند.",
@@ -426,8 +426,8 @@
  "compare.title": "مقایسه",
  "compare.identical": "پرونده‌ها یکسان‌اند.",
  "compare.differences": "{n} تفاوت",
- "compare.moveRight": "انتقال تغییرات: چپ ← راست",
- "compare.moveLeft": "انتقال تغییرات: راست ← چپ",
+ "compare.moveRight": "انتقال تغییرات: از اول به دوم",
+ "compare.moveLeft": "انتقال تغییرات: از دوم به اول",
  "compare.previous": "قبلی",
  "compare.next": "بعدی",
  "compare.close": "بستن",
@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "تغییر متن زبانهٔ باز",
  "ext.perm.ui": "نمایش پیام و درخواست ورودی از شما",
  "ext.perm.clipboard": "قراردادن متن در کلیپ‌بورد",
- "ext.perm.storage": "نگه‌داری مقدار کمی داده برای خود"
+ "ext.perm.storage": "نگه‌داری مقدار کمی داده برای خود",
+ "lossy.title": "برخی نویسه‌ها در {encoding} جا نمی‌شوند",
+ "lossy.message": "«{name}» نویسه‌هایی دارد که {encoding} نمی‌تواند نمایش دهد. اگر همین‌طور ذخیره شود، با «?» جایگزین می‌شوند.",
+ "lossy.utf8": "ذخیره با UTF-8",
+ "lossy.anyway": "به هر حال ذخیره کن"
 }

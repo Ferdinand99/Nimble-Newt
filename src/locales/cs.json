@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Měnit text otevřené karty",
  "ext.perm.ui": "Zobrazovat zprávy a žádat vás o vstup",
  "ext.perm.clipboard": "Vkládat text do schránky",
- "ext.perm.storage": "Uchovávat malé množství vlastních dat"
+ "ext.perm.storage": "Uchovávat malé množství vlastních dat",
+ "lossy.title": "Některé znaky se do kódování {encoding} nevejdou",
+ "lossy.message": "Soubor „{name}“ obsahuje znaky, které {encoding} neumí vyjádřit. Uložení v této podobě by je nahradilo znakem „?“.",
+ "lossy.utf8": "Uložit jako UTF-8",
+ "lossy.anyway": "Přesto uložit"
 }

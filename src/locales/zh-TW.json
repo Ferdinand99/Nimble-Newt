@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "變更已開啟分頁的文字",
  "ext.perm.ui": "顯示訊息並請你輸入",
  "ext.perm.clipboard": "將文字放入剪貼簿",
- "ext.perm.storage": "儲存少量自己的資料"
+ "ext.perm.storage": "儲存少量自己的資料",
+ "lossy.title": "部分字元無法以 {encoding} 表示",
+ "lossy.message": "「{name}」包含 {encoding} 無法表示的字元。照原樣儲存會將它們取代為「?」。",
+ "lossy.utf8": "儲存為 UTF-8",
+ "lossy.anyway": "仍要儲存"
 }

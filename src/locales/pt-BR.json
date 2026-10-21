@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Alterar o texto da aba aberta",
  "ext.perm.ui": "Mostrar mensagens e pedir informações a você",
  "ext.perm.clipboard": "Colocar texto na área de transferência",
- "ext.perm.storage": "Guardar uma pequena quantidade de dados próprios"
+ "ext.perm.storage": "Guardar uma pequena quantidade de dados próprios",
+ "lossy.title": "Alguns caracteres não cabem em {encoding}",
+ "lossy.message": "“{name}” tem caracteres que {encoding} não consegue representar. Salvar do jeito que está vai substituí-los por “?”.",
+ "lossy.utf8": "Salvar como UTF-8",
+ "lossy.anyway": "Salvar mesmo assim"
 }

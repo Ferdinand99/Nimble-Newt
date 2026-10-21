@@ -43,7 +43,7 @@
  "menu.view.prevTab": "Vorig tabblad",
  "menu.help.about": "Over Nimble Newt",
  "common.close": "Sluiten",
- "common.cancel": "Annuleer",
+ "common.cancel": "Annuleren",
  "common.save": "Opslaan",
  "common.ok": "OK",
  "common.done": "Klaar",
@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "De tekst van het geopende tabblad wijzigen",
  "ext.perm.ui": "Berichten tonen en om invoer vragen",
  "ext.perm.clipboard": "Tekst op het klembord plaatsen",
- "ext.perm.storage": "Een kleine hoeveelheid eigen gegevens opslaan"
+ "ext.perm.storage": "Een kleine hoeveelheid eigen gegevens opslaan",
+ "lossy.title": "Sommige tekens passen niet in {encoding}",
+ "lossy.message": "“{name}” bevat tekens die {encoding} niet kan weergeven. Als je het zo opslaat, worden ze vervangen door “?”.",
+ "lossy.utf8": "Opslaan als UTF-8",
+ "lossy.anyway": "Toch opslaan"
 }

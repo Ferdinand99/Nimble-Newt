@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Muuttaa avoimen välilehden tekstiä",
  "ext.perm.ui": "Näyttää viestejä ja pyytää sinulta syötettä",
  "ext.perm.clipboard": "Asettaa tekstiä leikepöydälle",
- "ext.perm.storage": "Säilyttää pienen määrän omaa dataa"
+ "ext.perm.storage": "Säilyttää pienen määrän omaa dataa",
+ "lossy.title": "Jotkin merkit eivät mahdu koodaukseen {encoding}",
+ "lossy.message": "”{name}” sisältää merkkejä, joita {encoding} ei voi esittää. Jos tallennat sen sellaisenaan, ne korvataan merkillä ”?”.",
+ "lossy.utf8": "Tallenna UTF-8-muodossa",
+ "lossy.anyway": "Tallenna silti"
 }

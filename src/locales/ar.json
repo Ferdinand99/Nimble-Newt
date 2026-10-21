@@ -50,7 +50,7 @@
  "tab.untitled": "بلا عنوان",
  "tab.modified": "معدَّل",
  "tab.close": "إغلاق التبويب",
- "tab.closeRight": "إغلاق التبويبات إلى اليمين",
+ "tab.closeRight": "إغلاق التبويبات بعد هذا",
  "tab.copyPath": "نسخ المسار",
  "toast.pathCopied": "تم نسخ المسار",
  "toast.lossyOpen": "يحتوي {name} على بايتات تعذّر فك ترميزها، وقد استُبدلت بالرمز �.",
@@ -426,8 +426,8 @@
  "compare.title": "المقارنة",
  "compare.identical": "الملفان متطابقان.",
  "compare.differences": "عدد الاختلافات: {n}",
- "compare.moveRight": "نقل التغييرات: من اليسار إلى اليمين",
- "compare.moveLeft": "نقل التغييرات: من اليمين إلى اليسار",
+ "compare.moveRight": "نقل التغييرات: من الأول إلى الثاني",
+ "compare.moveLeft": "نقل التغييرات: من الثاني إلى الأول",
  "compare.previous": "السابق",
  "compare.next": "التالي",
  "compare.close": "إغلاق",
@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "تغيير نص التبويب المفتوح",
  "ext.perm.ui": "عرض الرسائل وطلب إدخال منك",
  "ext.perm.clipboard": "وضع نص في الحافظة",
- "ext.perm.storage": "الاحتفاظ بقدر صغير من بياناتها الخاصة"
+ "ext.perm.storage": "الاحتفاظ بقدر صغير من بياناتها الخاصة",
+ "lossy.title": "بعض الأحرف لا يمكن تمثيلها في {encoding}",
+ "lossy.message": "يحتوي «{name}» على أحرف لا يستطيع الترميز {encoding} تمثيلها. سيؤدي الحفظ كما هو إلى استبدالها بالرمز «?».",
+ "lossy.utf8": "حفظ بترميز UTF-8",
+ "lossy.anyway": "حفظ على أي حال"
 }

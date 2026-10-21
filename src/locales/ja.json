@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "開いているタブのテキストを変更する",
  "ext.perm.ui": "メッセージを表示し、入力を求める",
  "ext.perm.clipboard": "テキストをクリップボードに置く",
- "ext.perm.storage": "少量の独自データを保持する"
+ "ext.perm.storage": "少量の独自データを保持する",
+ "lossy.title": "一部の文字は {encoding} に収まりません",
+ "lossy.message": "「{name}」には {encoding} で表現できない文字が含まれています。このまま保存すると「?」に置き換えられます。",
+ "lossy.utf8": "UTF-8 で保存",
+ "lossy.anyway": "そのまま保存"
 }

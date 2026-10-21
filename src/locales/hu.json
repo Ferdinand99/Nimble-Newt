@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "A megnyitott lap szövegének módosítása",
  "ext.perm.ui": "Üzenetek megjelenítése és bevitel kérése",
  "ext.perm.clipboard": "Szöveg elhelyezése a vágólapon",
- "ext.perm.storage": "Kis mennyiségű saját adat megőrzése"
+ "ext.perm.storage": "Kis mennyiségű saját adat megőrzése",
+ "lossy.title": "Néhány karakter nem fér el a(z) {encoding} kódolásban",
+ "lossy.message": "A(z) „{name}” olyan karaktereket tartalmaz, amelyeket a(z) {encoding} nem tud ábrázolni. Ha így menti, „?” karakterre cseréli őket.",
+ "lossy.utf8": "Mentés UTF-8-ként",
+ "lossy.anyway": "Mentés mindenképp"
 }

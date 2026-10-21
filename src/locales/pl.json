@@ -554,5 +554,9 @@
  "ext.perm.editorWrite": "Zmiana tekstu otwartej karty",
  "ext.perm.ui": "Wyświetlanie komunikatów i pytanie o dane",
  "ext.perm.clipboard": "Wstawianie tekstu do schowka",
- "ext.perm.storage": "Przechowywanie niewielkiej ilości własnych danych"
+ "ext.perm.storage": "Przechowywanie niewielkiej ilości własnych danych",
+ "lossy.title": "Niektóre znaki nie mieszczą się w kodowaniu {encoding}",
+ "lossy.message": "„{name}” zawiera znaki, których kodowanie {encoding} nie potrafi zapisać. Zapis w tej postaci zastąpi je znakiem „?”.",
+ "lossy.utf8": "Zapisz jako UTF-8",
+ "lossy.anyway": "Zapisz mimo to"
 }
