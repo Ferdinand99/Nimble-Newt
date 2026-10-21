@@ -107,6 +107,7 @@ pub fn build_regex(
     RegexBuilder::new(&pat)
         .case_insensitive(!case_sensitive)
         .multi_line(true)
+        .crlf(true)
         .size_limit(10 * 1024 * 1024)
         .build()
         .map_err(|e| Error::Pattern(e.to_string()))
@@ -457,6 +458,29 @@ mod tests {
         let m = find_in_text(&re, "a\r\n😀x y\nx", None, 10);
         assert_eq!((m[0].line, m[0].column), (2, 2));
         assert_eq!((m[1].line, m[1].column), (3, 0));
+    }
+
+    #[test]
+    fn dollar_matches_before_crlf() {
+        let re = build_regex("foo$", true, true, false).unwrap();
+        let m = find_in_text(&re, "foo\r\nbar", None, 10);
+        assert_eq!(m.len(), 1);
+        assert_eq!((m[0].line, m[0].column, m[0].length), (1, 0, 3));
+        // `.` must not swallow the carriage return.
+        let dots = build_regex("o.$", true, true, false).unwrap();
+        assert_eq!(find_in_text(&dots, "foo\r\nbar", None, 10)[0].length, 2);
+    }
+
+    #[test]
+    fn replace_in_crlf_file_with_anchor() {
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("a.txt");
+        fs::write(&f, "foo\r\nbar\r\n").unwrap();
+        let mut o = opts(d.path(), "foo$");
+        o.regex = true;
+        let rep = replace_in_files(&o, "baz", &[f.to_string_lossy().into_owned()]).unwrap();
+        assert_eq!(rep.replacements, 1);
+        assert_eq!(fs::read(&f).unwrap(), b"baz\r\nbar\r\n");
     }
 
     #[test]

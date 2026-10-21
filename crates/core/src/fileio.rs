@@ -99,6 +99,24 @@ pub fn read_as(path: &Path, enc: TextEncoding, default_eol: Eol) -> Result<Opene
 /// Writes `text` (any line endings) to `path` as `enc` with `eol` line breaks.
 /// The write goes through a temporary file in the same directory so a crash never truncates the original.
 pub fn write(path: &Path, text: &str, enc: TextEncoding, eol: Eol) -> Result<WriteResult> {
+    write_checked(path, text, enc, eol, None)
+}
+
+/// Like [`write`], but refuses with [`Error::Conflict`] when the file exists and its modification
+/// time is not `expected_mtime_ms` (it changed on disk after the editor read it).
+/// `None` skips the check: new files, "Save As" and a confirmed overwrite.
+pub fn write_checked(
+    path: &Path,
+    text: &str,
+    enc: TextEncoding,
+    eol: Eol,
+    expected_mtime_ms: Option<i64>,
+) -> Result<WriteResult> {
+    if let (Some(expected), Some(actual)) = (expected_mtime_ms, mtime_ms(path)) {
+        if expected != actual {
+            return Err(Error::Conflict(path.display().to_string()));
+        }
+    }
     let normalised = eol::convert(text, eol);
     let encoded = encoding::encode(&normalised, enc);
     write_bytes_atomic(path, &encoded.bytes)?;
@@ -108,29 +126,49 @@ pub fn write(path: &Path, text: &str, enc: TextEncoding, eol: Eol) -> Result<Wri
     })
 }
 
+/// Replaces the content of `path` atomically. Symbolic links are followed, so the link itself
+/// survives and its target is updated. When no temporary file can be created next to the target
+/// (read-only directory) the file is written in place instead.
 pub fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let dir = path
+    let target = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let dir = target
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
-    let name = path
+    let name = target
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     let tmp = dir.join(format!(".{name}.nimble-tmp"));
-    {
-        let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(bytes)?;
-        f.sync_all()?;
-    }
-    // Preserve permissions of an existing target.
-    if let Ok(meta) = std::fs::metadata(path) {
-        let _ = std::fs::set_permissions(&tmp, meta.permissions());
-    }
-    if let Err(e) = std::fs::rename(&tmp, path) {
+    let mut file = match std::fs::File::create(&tmp) {
+        Ok(f) => f,
+        Err(_) => return write_in_place(&target, bytes),
+    };
+    let staged = file.write_all(bytes).and_then(|()| file.sync_all());
+    drop(file);
+    if let Err(e) = staged {
         let _ = std::fs::remove_file(&tmp);
         return Err(e.into());
     }
+    // Preserve permissions of an existing target.
+    if let Ok(meta) = std::fs::metadata(&target) {
+        let _ = std::fs::set_permissions(&tmp, meta.permissions());
+    }
+    if let Err(e) = std::fs::rename(&tmp, &target) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e.into());
+    }
+    Ok(())
+}
+
+fn write_in_place(target: &Path, bytes: &[u8]) -> Result<()> {
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(target)?;
+    f.write_all(bytes)?;
+    f.sync_all()?;
     Ok(())
 }
 
@@ -189,6 +227,93 @@ mod tests {
         write(&p, "y", TextEncoding::Utf8, Eol::Lf).unwrap();
         assert_eq!(std::fs::read_to_string(&p).unwrap(), "y");
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn stale_mtime_is_rejected_and_nothing_is_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("a.txt");
+        let first = write(&p, "mine", TextEncoding::Utf8, Eol::Lf).unwrap();
+        std::fs::write(&p, "theirs").unwrap();
+        let filetime_bump = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+        std::fs::File::options()
+            .write(true)
+            .open(&p)
+            .unwrap()
+            .set_modified(filetime_bump)
+            .unwrap();
+        let err = write_checked(
+            &p,
+            "overwrite",
+            TextEncoding::Utf8,
+            Eol::Lf,
+            Some(first.mtime_ms),
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::Conflict(_)));
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "theirs");
+        // A confirmed overwrite (no expectation) goes through.
+        write_checked(&p, "overwrite", TextEncoding::Utf8, Eol::Lf, None).unwrap();
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "overwrite");
+    }
+
+    #[test]
+    fn matching_mtime_and_new_files_are_accepted() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("a.txt");
+        // New file: nothing on disk to conflict with, even with an expectation.
+        let w = write_checked(&p, "one", TextEncoding::Utf8, Eol::Lf, Some(123)).unwrap();
+        write_checked(&p, "two", TextEncoding::Utf8, Eol::Lf, Some(w.mtime_ms)).unwrap();
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "two");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_is_kept_and_target_updated() {
+        let dir = tempfile::tempdir().unwrap();
+        let real_dir = dir.path().join("real");
+        let link_dir = dir.path().join("links");
+        std::fs::create_dir_all(&real_dir).unwrap();
+        std::fs::create_dir_all(&link_dir).unwrap();
+        let target = real_dir.join("data.txt");
+        std::fs::write(&target, "old").unwrap();
+        let link = link_dir.join("data-link.txt");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        write(&link, "new", TextEncoding::Utf8, Eol::Lf).unwrap();
+        assert!(std::fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "new");
+        // No temporary file is left in either directory.
+        assert_eq!(std::fs::read_dir(&real_dir).unwrap().count(), 1);
+        assert_eq!(std::fs::read_dir(&link_dir).unwrap().count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_only_directory_falls_back_to_writing_in_place() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("ro");
+        std::fs::create_dir(&sub).unwrap();
+        let p = sub.join("a.txt");
+        std::fs::write(&p, "old").unwrap();
+        std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let r = write(&p, "new", TextEncoding::Utf8, Eol::Lf);
+        std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755)).unwrap();
+        r.unwrap();
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "new");
+        assert_eq!(std::fs::read_dir(&sub).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn in_place_write_replaces_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("a.txt");
+        std::fs::write(&p, "a much longer old content").unwrap();
+        write_in_place(&p, b"new").unwrap();
+        assert_eq!(std::fs::read(&p).unwrap(), b"new");
     }
 
     #[test]

@@ -138,8 +138,9 @@ pub fn decode_as(bytes: &[u8], enc: TextEncoding) -> (String, bool) {
 }
 
 fn decode_utf16(body: &[u8], read: fn([u8; 2]) -> u16) -> (String, bool) {
-    let units = body.chunks_exact(2).map(|c| read([c[0], c[1]]));
-    let mut lossy = !body.len().is_multiple_of(2);
+    let (pairs, rest) = body.as_chunks::<2>();
+    let units = pairs.iter().map(|c| read(*c));
+    let mut lossy = !rest.is_empty();
     let mut out = String::with_capacity(body.len() / 2);
     for r in char::decode_utf16(units) {
         match r {

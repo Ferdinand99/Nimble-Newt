@@ -13,6 +13,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("{0}")]
     Msg(String),
+    #[error("{0} was changed by another program since it was opened")]
+    Conflict(String),
     #[error("invalid pattern: {0}")]
     Pattern(String),
     #[error("serialization error: {0}")]
