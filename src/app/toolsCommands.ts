@@ -17,7 +17,7 @@ const indentUnit = (): string | number => {
 
 /** Applies `fn` to every non-empty selection, or to the whole document when nothing is selected. */
 function transform(fn: Fn): void {
-  const v = workspace.view;
+  const v = workspace.focusedView();
   const ranges = v.state.selection.ranges.filter((r) => !r.empty);
   const spans = ranges.length ? ranges.map((r) => ({ from: r.from, to: r.to })) : [{ from: 0, to: v.state.doc.length }];
   const changes: { from: number; to: number; insert: string }[] = [];
@@ -32,13 +32,13 @@ function transform(fn: Fn): void {
 }
 
 const selectionOrDoc = (): string => {
-  const v = workspace.view;
+  const v = workspace.focusedView();
   const sel = v.state.selection.ranges.filter((r) => !r.empty).map((r) => v.state.sliceDoc(r.from, r.to));
   return sel.length ? sel.join("\n") : v.state.doc.toString();
 };
 
 function insertAtCursor(text: string): void {
-  const v = workspace.view;
+  const v = workspace.focusedView();
   v.dispatch(v.state.changeByRange((r) => ({ changes: { from: r.from, to: r.to, insert: text }, range: EditorSelection.cursor(r.from + text.length) })), { userEvent: "input.tools" });
   workspace.focus();
 }
@@ -67,7 +67,8 @@ async function showHashes(title: string, load: () => Promise<{ algorithm: string
 }
 
 async function timestampSheet(): Promise<void> {
-  const seed = workspace.view.state.sliceDoc(workspace.view.state.selection.main.from, workspace.view.state.selection.main.to).trim();
+  const fv = workspace.focusedView();
+  const seed = fv.state.sliceDoc(fv.state.selection.main.from, fv.state.selection.main.to).trim();
   const input = h("input", { class: "input mono", type: "text", value: seed || String(Math.floor(Date.now() / 1000)), "aria-label": t("tools.timestampInput"), spellcheck: false });
   const out = h("ul", { class: "inset-list" });
   const render = () => {

@@ -10,7 +10,7 @@ type LinesFn = (lines: string[]) => string[];
 
 /** Applies `fn` to the lines of the selection (or the whole document when nothing is selected). */
 function onLines(fn: LinesFn): void {
-  const v: EditorView = workspace.view;
+  const v: EditorView = workspace.focusedView();
   const st = v.state;
   const m = st.selection.main;
   const from = m.empty ? 0 : st.doc.lineAt(m.from).from;
@@ -27,7 +27,7 @@ function onLines(fn: LinesFn): void {
 
 /** Applies `fn` to each selected range (text transformations such as case changes). */
 function onSelection(fn: (s: string) => string): void {
-  const v = workspace.view;
+  const v = workspace.focusedView();
   if (v.state.selection.ranges.every((r) => r.empty)) return void toast(t("lineop.selectFirst"), "info");
   v.dispatch(
     v.state.changeByRange((r) => {

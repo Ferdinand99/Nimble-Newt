@@ -515,5 +515,13 @@
  "folder.tooMany": "For mange oppføringer; bruk filteret.",
  "cmd.view.minimap": "Av/på dokumentkart",
  "settings.minimap": "Dokumentkart",
- "settings.minimapHint": "En liten oversikt over fila ved siden av rullefeltet"
+ "settings.minimapHint": "En liten oversikt over fila ved siden av rullefeltet",
+ "cmd.view.split": "Delt visning: side om side",
+ "cmd.view.splitBelow": "Delt visning: over og under",
+ "cmd.view.splitClose": "Lukk delt visning",
+ "split.pane": "Andre visning av fila",
+ "split.resize": "Endre størrelse på delingen",
+ "cmd.view.splitTabs": "Vis to faner side om side …",
+ "split.pickTab": "Vis ved siden av …",
+ "split.closeTabs": "Lukk"
 }

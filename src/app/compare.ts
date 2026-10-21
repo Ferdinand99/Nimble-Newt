@@ -57,15 +57,16 @@ const button = (label: string, ic: string, onClick: () => void): HTMLButtonEleme
   h("button", { class: "btn btn-sm", type: "button", onclick: onClick }, icon(ic), h("span", {}, label));
 
 /** Compares two open tabs side by side. Edits in either pane go straight into the tab. */
-export async function compareTabs(a: Doc, b: Doc): Promise<void> {
+export async function compareTabs(a: Doc, b: Doc, opts: { plain?: boolean } = {}): Promise<void> {
   closeCompare();
   if (!(await workspace.ensureLoaded(a)) || !(await workspace.ensureLoaded(b))) return;
   const ta = workspace.textOf(a);
   const tb = workspace.textOf(b);
-  if (ta.length > LARGE_CHARS || tb.length > LARGE_CHARS) return compareLarge(a.title, b.title, ta, tb, a, b);
+  if (!opts.plain && (ta.length > LARGE_CHARS || tb.length > LARGE_CHARS)) return compareLarge(a.title, b.title, ta, tb, a, b);
 
   const [la, lb] = await Promise.all([workspace.languageExtensionFor(a), workspace.languageExtensionFor(b)]);
   const m = mount(`${a.title}  ↔  ${b.title}`);
+  m.root.classList.toggle("plain", !!opts.plain);
   let direction: "a-to-b" | "b-to-a" = "a-to-b";
 
   const syncA = debounce(() => workspace.applyText(a, view.a.state.doc.toString()), 250);
@@ -86,10 +87,10 @@ export async function compareTabs(a: Doc, b: Doc): Promise<void> {
     a: { doc: ta, extensions: [editorExtensions(workspace.viewOptions(a.indent), la), listen(syncA)] },
     b: { doc: tb, extensions: [editorExtensions(workspace.viewOptions(b.indent), lb), listen(syncB)] },
     parent: m.body,
-    revertControls: direction,
-    highlightChanges: true,
-    gutter: true,
-    collapseUnchanged: { margin: 3, minSize: 6 },
+    revertControls: opts.plain ? undefined : direction,
+    highlightChanges: !opts.plain,
+    gutter: !opts.plain,
+    collapseUnchanged: opts.plain ? undefined : { margin: 3, minSize: 6 },
     diffConfig: { scanLimit: 500, timeout: 1500 },
   });
 
@@ -107,12 +108,11 @@ export async function compareTabs(a: Doc, b: Doc): Promise<void> {
     view.b.focus();
   };
   m.bar.append(
-    button(t("compare.previous"), "arrow-up", prev),
-    button(t("compare.next"), "arrow-down", next),
-    dirBtn,
-    h("button", { class: "btn btn-sm btn-primary", type: "button", onclick: closeCompare }, t("compare.close")),
+    ...(opts.plain ? [] : [button(t("compare.previous"), "arrow-up", prev), button(t("compare.next"), "arrow-down", next), dirBtn]),
+    h("button", { class: "btn btn-sm btn-primary", type: "button", onclick: closeCompare }, t(opts.plain ? "split.closeTabs" : "compare.close")),
   );
-  refreshStats();
+  if (opts.plain) m.stats.textContent = "";
+  else refreshStats();
 
   const destroy = () => {
     syncA.flush();
@@ -207,6 +207,17 @@ export async function compareWithTab(): Promise<void> {
   const id = await quickPick(others.map((d) => ({ label: d.title, detail: d.path ?? "", value: d.id })), t("compare.pickTab"));
   const b = others.find((d) => d.id === id);
   if (b) await compareTabs(a, b);
+}
+
+/** Shows the active tab next to another open tab (no diff markers); edits go straight into the tabs. */
+export async function showTabsSideBySide(): Promise<void> {
+  const a = workspace.active;
+  if (!a) return;
+  const others = workspace.docs.filter((d) => d !== a);
+  if (!others.length) return void toast(t("compare.needTwo"), "info");
+  const id = await quickPick(others.map((d) => ({ label: d.title, detail: d.path ?? "", value: d.id })), t("split.pickTab"));
+  const b = others.find((d) => d.id === id);
+  if (b) await compareTabs(a, b, { plain: true });
 }
 
 /** Compares the active tab with a file chosen on disk (it is opened as a tab). */

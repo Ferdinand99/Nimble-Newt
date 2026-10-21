@@ -56,7 +56,7 @@ export function initStatusbar(): StatusHandles {
       follow.textContent = t("follow.pill");
       return;
     }
-    const st = workspace.view.state;
+    const st = workspace.focusedView().state;
     const main = st.selection.main;
     const line = st.doc.lineAt(main.head);
     pos.textContent = t("status.pos", { line: line.number, col: main.head - line.from + 1 });
@@ -90,7 +90,7 @@ export function initStatusbar(): StatusHandles {
   render();
 
   const goToLine = async () => {
-    const st = workspace.view.state;
+    const st = workspace.focusedView().state;
     const n = await promptNumber(t("cmd.edit.gotoLine"), t("status.lineRange", { max: st.doc.lines }), 1, st.doc.lines);
     if (n !== null) workspace.goTo(n, 0);
   };

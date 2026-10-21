@@ -213,7 +213,8 @@ export function openFindInFiles(withReplace = false): void {
     setRoot(folderState().root ?? (p ? dirname(p) : ""));
   }
   if (withReplace && !replaceMode) (panel.querySelector('[aria-label="' + t("find.toggleReplace") + '"]') as HTMLElement | null)?.click();
-  const sel = workspace.view.state.sliceDoc(workspace.view.state.selection.main.from, workspace.view.state.selection.main.to);
+  const fv = workspace.focusedView();
+  const sel = fv.state.sliceDoc(fv.state.selection.main.from, fv.state.selection.main.to);
   if (sel && !sel.includes("\n")) queryIn.value = sel;
   if (!root) void chooseRoot();
   queryIn.focus();

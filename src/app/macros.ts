@@ -61,7 +61,7 @@ function report(r: PlayResult, untilEnd: boolean): void {
 
 async function play(steps: MacroStep[], mode: { times: number } | { untilEnd: true }): Promise<void> {
   if (recorder.recording) toggleRecording();
-  const view = workspace.view;
+  const view = workspace.focusedView();
   recorder.playing = true;
   cancelRequested = false;
   try {

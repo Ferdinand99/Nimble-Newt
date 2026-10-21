@@ -510,6 +510,18 @@
   },
   {
    "id": "view.minimap"
+  },
+  {
+   "id": "view.split"
+  },
+  {
+   "id": "view.splitBelow"
+  },
+  {
+   "id": "view.splitClose"
+  },
+  {
+   "id": "view.splitTabs"
   }
  ],
  "menu": [
@@ -664,6 +676,11 @@
     "view.minimap",
     "view.completion",
     "doc.follow",
+    "-",
+    "view.split",
+    "view.splitBelow",
+    "view.splitTabs",
+    "view.splitClose",
     "-",
     "view.zoomIn",
     "view.zoomOut",

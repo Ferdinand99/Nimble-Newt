@@ -515,5 +515,13 @@
  "folder.tooMany": "Too many entries; use the filter.",
  "cmd.view.minimap": "Toggle Document Map",
  "settings.minimap": "Document map",
- "settings.minimapHint": "A small overview of the file next to the scrollbar"
+ "settings.minimapHint": "A small overview of the file next to the scrollbar",
+ "cmd.view.split": "Split View: Side by Side",
+ "cmd.view.splitBelow": "Split View: Top and Bottom",
+ "cmd.view.splitClose": "Close Split View",
+ "split.pane": "Second view of the file",
+ "split.resize": "Resize the split",
+ "cmd.view.splitTabs": "Show Two Tabs Side by Side…",
+ "split.pickTab": "Show next to…",
+ "split.closeTabs": "Close"
 }

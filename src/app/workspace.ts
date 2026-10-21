@@ -68,6 +68,9 @@ export class Workspace {
   docs: Doc[] = [];
   activeId: string | null = null;
   view!: EditorView;
+  /** The second editor of a split view, when there is one. */
+  secondary: EditorView | null = null;
+  private mirrorHook: ((u: ViewUpdate) => void) | null = null;
   recent: string[] = [];
   private closed: { path: string }[] = [];
   private listeners = new Set<Listener>();
@@ -161,9 +164,24 @@ export class Workspace {
     doc.optionsVersion = this.optionsVersion;
   }
 
+  attachSecondary(view: EditorView, mirror: (u: ViewUpdate) => void): void {
+    this.secondary = view;
+    this.mirrorHook = mirror;
+  }
+  detachSecondary(): void {
+    this.secondary = null;
+    this.mirrorHook = null;
+  }
+  /** The editor that has keyboard focus: the split pane when it is focused, otherwise the main editor. */
+  focusedView(): EditorView {
+    return this.secondary?.hasFocus ? this.secondary : this.view;
+  }
+
   private onUpdate(u: ViewUpdate): void {
     // Secondary editors (comparison panes) share the extension set but are not the active tab.
+    if (u.view === this.secondary && u.selectionSet) this.emit("selection");
     if (u.view !== this.view) return;
+    if (u.docChanged) this.mirrorHook?.(u);
     const doc = this.active;
     if (!doc) return;
     if (u.docChanged) {

@@ -157,3 +157,10 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+
+.compare.plain .cm-changedLine,
+.compare.plain .cm-deletedChunk,
+.compare.plain .cm-deletedLine,
+.compare.plain .cm-insertedLine {
+  background: none;
+}

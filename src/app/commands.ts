@@ -29,7 +29,7 @@ import { checkForUpdates } from "./updater";
 import { workspace } from "./workspace";
 import { LANGUAGES } from "../lib/languages";
 
-const view = (): EditorView => workspace.view;
+const view = (): EditorView => workspace.focusedView();
 const cm = (cmd: (v: EditorView) => boolean) => () => {
   cmd(view());
   workspace.focus();
@@ -176,6 +176,10 @@ const handlers: Record<string, () => void | Promise<void>> = {
   "view.zoomReset": () => zoom(null),
   "view.folder": () => toggleFolder(),
   "file.openFolder": () => openFolder(),
+  "view.split": () => import("./split").then((m) => m.toggleSplit("right")),
+  "view.splitBelow": () => import("./split").then((m) => m.toggleSplit("below")),
+  "view.splitTabs": () => import("./compare").then((m) => m.showTabsSideBySide()),
+  "view.splitClose": () => import("./split").then((m) => m.closeSplit()),
   "view.outline": () => togglePanel("outline"),
   "view.nextTab": () => workspace.nextTab(1),
   "view.prevTab": () => workspace.nextTab(-1),
