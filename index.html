@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Nimble Newt</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="tabbar" id="tabbar" data-tauri-drag-region>
+        <div class="tabs" id="tabs" role="tablist"></div>
+        <button class="btn btn-icon btn-plain btn-sm" id="new-tab" type="button"><svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"></use></svg></button>
+        <div class="tabbar-fill" data-tauri-drag-region></div>
+        <button class="btn btn-icon btn-plain btn-sm" id="open-palette" type="button"><svg class="icon" aria-hidden="true"><use href="/icons.svg#search"></use></svg></button>
+        <button class="btn btn-icon btn-plain btn-sm" id="open-settings" type="button"><svg class="icon" aria-hidden="true"><use href="/icons.svg#gear"></use></svg></button>
+      </header>
+      <main class="workspace" id="workspace">
+        <div id="editor"></div>
+        <div class="empty" id="empty" hidden></div>
+        <div class="drop-overlay" id="drop-overlay" hidden></div>
+      </main>
+      <section class="fif" id="fif" hidden></section>
+      <footer class="statusbar" id="statusbar"></footer>
+    </div>
+    <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

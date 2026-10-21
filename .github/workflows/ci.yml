@@ -1,0 +1,221 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Pull requests are checked by the pull_request event only, so a push to a PR branch runs CI
+# once (two events would cancel each other and show up as failed checks). A newer push cancels
+# the older run. Feature branches without a PR can be checked with "Run workflow".
+concurrency:
+  group: ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libssl-dev pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      # The tauri crate embeds ../dist at compile time; a stub is enough for lint/test.
+      - name: Create stub dist/
+        run: |
+          mkdir -p dist
+          echo '<!doctype html><title>stub</title>' > dist/index.html
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  frontend:
+    name: Frontend (typecheck, lint, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: [rust, frontend]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+            args: --bundles deb
+            rust_targets: ""
+          - name: windows
+            os: windows-latest
+            args: ""
+            rust_targets: ""
+          - name: macos
+            os: macos-latest
+            args: --target universal-apple-darwin
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tauri Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libssl-dev pkg-config xvfb
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # CI has no updater signing key, so updater artifacts are switched off.
+      - name: Build installers
+        run: npx tauri build ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Collect installers
+        run: |
+          mkdir -p out
+          for d in target/release/bundle target/universal-apple-darwin/release/bundle; do
+            [ -d "$d" ] || continue
+            find "$d" -type f \( -name '*.msi' -o -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.AppImage' \) \
+              -exec cp {} out/ \;
+          done
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.name }}
+          path: out/*
+          if-no-files-found: error
+
+      - name: Startup and size report
+        continue-on-error: true
+        env:
+          RUNNER_NAME_OS: ${{ matrix.name }}
+        run: |
+          set +e
+          SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
+
+          # Locate the built binary.
+          BIN=""
+          for c in \
+            "target/universal-apple-darwin/release/bundle/macos/Nimble Newt.app/Contents/MacOS/nimble-newt" \
+            "target/release/nimble-newt.exe" \
+            "target/release/nimble-newt"; do
+            if [ -f "$c" ]; then BIN="$c"; break; fi
+          done
+
+          {
+            echo "### Size and startup report (${RUNNER_NAME_OS})"
+            echo
+          } >> "$SUMMARY"
+
+          if [ -z "$BIN" ]; then
+            echo "Binary not found; report skipped." >> "$SUMMARY"
+            exit 0
+          fi
+          BIN="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
+
+          {
+            echo "| File | Size (bytes) | Size (MiB) |"
+            echo "|---|---:|---:|"
+          } >> "$SUMMARY"
+          report_size() {
+            local f="$1" b
+            b=$(wc -c < "$f" | tr -d ' ')
+            echo "| \`$(basename "$f")\` | $b | $(awk -v b="$b" 'BEGIN{printf "%.2f", b/1048576}') |" >> "$SUMMARY"
+          }
+          report_size "$BIN"
+          for f in out/*; do [ -f "$f" ] && report_size "$f"; done
+
+          # Run the app 5 times with a fresh profile; it writes {"startup_ms":N} and exits.
+          RESULTS=""
+          for i in 1 2 3 4 5; do
+            P="$(mktemp -d)"
+            OUTFILE="$P/startup.json"
+            (
+              export HOME="$P/home" XDG_CONFIG_HOME="$P/home/.config" XDG_DATA_HOME="$P/home/.local/share" \
+                     XDG_CACHE_HOME="$P/home/.cache"
+              mkdir -p "$HOME/.config" "$HOME/.local/share" "$HOME/.cache"
+              if [ "$RUNNER_OS" = "Windows" ]; then
+                export USERPROFILE="$(cygpath -w "$HOME")" APPDATA="$(cygpath -w "$HOME/AppData/Roaming")" \
+                       LOCALAPPDATA="$(cygpath -w "$HOME/AppData/Local")"
+                mkdir -p "$HOME/AppData/Roaming" "$HOME/AppData/Local"
+                export NIMBLE_STARTUP_REPORT="$(cygpath -w "$OUTFILE")"
+              else
+                export NIMBLE_STARTUP_REPORT="$OUTFILE"
+              fi
+              if [ "$RUNNER_OS" = "Linux" ]; then
+                exec xvfb-run -a "$BIN"
+              else
+                exec "$BIN"
+              fi
+            ) >/dev/null 2>"$P/stderr.log" &
+            PID=$!
+            # 60 s timeout, polling for the report file.
+            for _ in $(seq 1 120); do
+              [ -s "$OUTFILE" ] && break
+              kill -0 "$PID" 2>/dev/null || break
+              sleep 0.5
+            done
+            sleep 0.3
+            if [ -s "$OUTFILE" ]; then
+              MS=$(sed -n 's/.*"startup_ms"[^0-9]*\([0-9][0-9]*\).*/\1/p' "$OUTFILE")
+              RESULTS="$RESULTS $MS"
+            fi
+            kill "$PID" 2>/dev/null
+            pkill -f nimble-newt 2>/dev/null
+            [ "$RUNNER_OS" = "Windows" ] && taskkill //F //IM nimble-newt.exe >/dev/null 2>&1
+            [ -s "$OUTFILE" ] || { echo "Run $i produced no report. stderr:"; head -n 20 "$P/stderr.log"; }
+          done
+
+          echo >> "$SUMMARY"
+          if [ -z "$RESULTS" ]; then
+            echo "The app could not be started on this runner (no startup report was written in 5 attempts); startup time not measured." >> "$SUMMARY"
+            exit 0
+          fi
+          STATS=$(node -e '
+            const v = process.argv[1].trim().split(/\s+/).map(Number).sort((a, b) => a - b);
+            const med = v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
+            console.log(`${v[0]}|${med}|${v.length}|${v.join(", ")}`);
+          ' "$RESULTS")
+          IFS='|' read -r MIN MED N ALL <<< "$STATS"
+          {
+            echo "| Startup (cold-ish profile) | ms |"
+            echo "|---|---:|"
+            echo "| min | $MIN |"
+            echo "| median | $MED |"
+            echo "| successful runs | $N / 5 ($ALL) |"
+          } >> "$SUMMARY"
