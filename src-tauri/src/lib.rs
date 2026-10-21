@@ -163,6 +163,197 @@ fn list_encodings() -> Vec<EncodingInfo> {
         .collect()
 }
 
+// ---- large files ---------------------------------------------------------------
+
+use nimble_core::largefile::{
+    self, Direction, Hit, IndexOptions, IndexStatus, LargeFile, LargeQuery, LinesChunk, OpenInfo,
+    SearchPos,
+};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+struct LargeHandle {
+    file: Arc<LargeFile>,
+    cancel: Arc<AtomicBool>,
+    closed: Arc<AtomicBool>,
+}
+
+#[derive(Default)]
+struct LargeFiles(Mutex<(u64, std::collections::HashMap<u64, Arc<LargeHandle>>)>);
+
+impl LargeFiles {
+    fn get(&self, id: u64) -> CmdResult<Arc<LargeHandle>> {
+        self.0
+            .lock()
+            .unwrap()
+            .1
+            .get(&id)
+            .cloned()
+            .ok_or_else(|| "the file is no longer open".to_string())
+    }
+}
+
+/// Indexes in the background, one chunk at a time, until the whole file is done or the viewer closed.
+fn spawn_indexer(h: Arc<LargeHandle>) {
+    std::thread::spawn(move || {
+        while !h.closed.load(Ordering::Relaxed) {
+            match h.file.index_step(64 * 1024 * 1024) {
+                Ok(st) if st.done => break,
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+    });
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileMeta {
+    size: u64,
+    /// Above the limit for normal editing: such files open in the read-only large-file viewer.
+    large: bool,
+}
+
+#[tauri::command]
+async fn file_meta(path: String) -> CmdResult<FileMeta> {
+    let size = std::fs::metadata(&path).map_err(err)?.len();
+    Ok(FileMeta {
+        size,
+        large: size > fileio::MAX_EDITABLE_BYTES,
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LargeOpened {
+    id: u64,
+    info: OpenInfo,
+    status: IndexStatus,
+}
+
+#[tauri::command]
+async fn lf_open(
+    files: State<'_, LargeFiles>,
+    path: String,
+    encoding: Option<TextEncoding>,
+) -> CmdResult<LargeOpened> {
+    let (file, info) = tauri::async_runtime::spawn_blocking(move || {
+        LargeFile::open_with(Path::new(&path), IndexOptions::default(), encoding)
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)?;
+    let status = file.status();
+    let handle = Arc::new(LargeHandle {
+        file: Arc::new(file),
+        cancel: Arc::default(),
+        closed: Arc::default(),
+    });
+    let id = {
+        let mut g = files.0.lock().unwrap();
+        g.0 += 1;
+        let id = g.0;
+        g.1.insert(id, handle.clone());
+        id
+    };
+    spawn_indexer(handle);
+    Ok(LargeOpened { id, info, status })
+}
+
+#[tauri::command]
+async fn lf_status(files: State<'_, LargeFiles>, id: u64) -> CmdResult<IndexStatus> {
+    Ok(files.get(id)?.file.status())
+}
+
+#[tauri::command]
+async fn lf_read(
+    files: State<'_, LargeFiles>,
+    id: u64,
+    first: u64,
+    count: usize,
+    max_chars: usize,
+) -> CmdResult<LinesChunk> {
+    let h = files.get(id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        h.file
+            .read_lines(first, count.min(500), max_chars.clamp(80, 20_000))
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)
+}
+
+#[tauri::command]
+async fn lf_search(
+    files: State<'_, LargeFiles>,
+    id: u64,
+    query: LargeQuery,
+    from: SearchPos,
+    direction: Direction,
+) -> CmdResult<Option<Hit>> {
+    let h = files.get(id)?;
+    h.cancel.store(false, Ordering::Relaxed);
+    tauri::async_runtime::spawn_blocking(move || h.file.search(&query, from, direction, &h.cancel))
+        .await
+        .map_err(err)?
+        .map_err(|e| {
+            if largefile::is_cancelled(&e) {
+                largefile::CANCELLED.to_string()
+            } else {
+                e.to_string()
+            }
+        })
+}
+
+#[tauri::command]
+async fn lf_count(files: State<'_, LargeFiles>, id: u64, query: LargeQuery) -> CmdResult<u64> {
+    let h = files.get(id)?;
+    h.cancel.store(false, Ordering::Relaxed);
+    tauri::async_runtime::spawn_blocking(move || {
+        h.file.count_matches(&query, &h.cancel, &mut |_| {})
+    })
+    .await
+    .map_err(err)?
+    .map_err(|e| {
+        if largefile::is_cancelled(&e) {
+            largefile::CANCELLED.to_string()
+        } else {
+            e.to_string()
+        }
+    })
+}
+
+/// Stops a running search or count on this file.
+#[tauri::command]
+fn lf_cancel(files: State<'_, LargeFiles>, id: u64) {
+    if let Ok(h) = files.get(id) {
+        h.cancel.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Picks up appended data (follow mode) and restarts the indexer for the new part.
+#[tauri::command]
+async fn lf_refresh(files: State<'_, LargeFiles>, id: u64) -> CmdResult<IndexStatus> {
+    let h = files.get(id)?;
+    let h2 = h.clone();
+    let st = tauri::async_runtime::spawn_blocking(move || h2.file.refresh())
+        .await
+        .map_err(err)?
+        .map_err(err)?;
+    if !st.done {
+        spawn_indexer(h);
+    }
+    Ok(st)
+}
+
+#[tauri::command]
+fn lf_close(files: State<'_, LargeFiles>, id: u64) {
+    if let Some(h) = files.0.lock().unwrap().1.remove(&id) {
+        h.closed.store(true, Ordering::Relaxed);
+        h.cancel.store(true, Ordering::Relaxed);
+    }
+}
+
 // ---- hashes -------------------------------------------------------------------
 
 #[derive(Serialize)]
@@ -542,6 +733,7 @@ pub fn run() {
         .manage(Pending::default())
         .manage(PendingUpdate::default())
         .manage(CompareCache::default())
+        .manage(LargeFiles::default())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             app.manage(SessionStore::new(dir).map_err(|e| e.to_string())?);
@@ -594,6 +786,15 @@ pub fn run() {
             compare_files,
             compare_lines,
             compare_close,
+            file_meta,
+            lf_open,
+            lf_status,
+            lf_read,
+            lf_search,
+            lf_count,
+            lf_cancel,
+            lf_refresh,
+            lf_close,
             hash_text,
             hash_file,
             replace_in_folder,

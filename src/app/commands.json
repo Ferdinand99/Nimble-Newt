@@ -497,6 +497,9 @@
   },
   {
    "id": "tools.panel"
+  },
+  {
+   "id": "file.openLarge"
   }
  ],
  "menu": [
@@ -505,6 +508,7 @@
    "items": [
     "file.new",
     "file.open",
+    "file.openLarge",
     "file.quickOpen",
     "-",
     "file.save",

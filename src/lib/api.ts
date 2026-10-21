@@ -131,6 +131,53 @@ export interface FileComparison {
   eolB: Eol;
 }
 
+export interface LargeOpenInfo {
+  path: string;
+  size: number;
+  encoding: Encoding;
+  eol: Eol;
+  bomLen: number;
+}
+export interface IndexStatus {
+  indexedBytes: number;
+  indexedLines: number;
+  size: number;
+  done: boolean;
+  totalLines: number | null;
+  reset: boolean;
+}
+export interface LargeOpened {
+  id: number;
+  info: LargeOpenInfo;
+  status: IndexStatus;
+}
+export interface LineText {
+  text: string;
+  truncated: boolean;
+  offset: number;
+}
+export interface LinesChunk {
+  first: number;
+  lines: LineText[];
+  available: boolean;
+  eof: boolean;
+  totalLines: number | null;
+}
+export interface LargeQuery {
+  pattern: string;
+  regex: boolean;
+  caseSensitive: boolean;
+  wholeWord: boolean;
+}
+export interface LargeHit {
+  line: number;
+  column: number;
+  length: number;
+  byteOffset: number;
+  preview: string;
+  wrapped: boolean;
+}
+
 export type HashAlgorithm = "md5" | "sha1" | "sha256" | "sha512";
 export interface Digest {
   algorithm: HashAlgorithm;
@@ -138,6 +185,15 @@ export interface Digest {
 }
 
 export const api = {
+  fileMeta: (path: string) => invoke<{ size: number; large: boolean }>("file_meta", { path }),
+  lfOpen: (path: string, encoding: Encoding | null = null) => invoke<LargeOpened>("lf_open", { path, encoding }),
+  lfStatus: (id: number) => invoke<IndexStatus>("lf_status", { id }),
+  lfRead: (id: number, first: number, count: number, maxChars: number) => invoke<LinesChunk>("lf_read", { id, first, count, maxChars }),
+  lfSearch: (id: number, query: LargeQuery, from: { line: number; column: number }, direction: "forward" | "backward") => invoke<LargeHit | null>("lf_search", { id, query, from, direction }),
+  lfCount: (id: number, query: LargeQuery) => invoke<number>("lf_count", { id, query }),
+  lfCancel: (id: number) => invoke<void>("lf_cancel", { id }),
+  lfRefresh: (id: number) => invoke<IndexStatus>("lf_refresh", { id }),
+  lfClose: (id: number) => invoke<void>("lf_close", { id }),
   hashText: (text: string, algorithms: HashAlgorithm[]) => invoke<Digest[]>("hash_text", { text, algorithms }),
   hashFile: (path: string, algorithms: HashAlgorithm[]) => invoke<Digest[]>("hash_file", { path, algorithms }),
   compareText: (a: string, b: string, options: DiffOptions) => invoke<Comparison>("compare_text", { a, b, options }),

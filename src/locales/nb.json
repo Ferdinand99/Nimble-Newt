@@ -486,5 +486,20 @@
  "tools.ts.seconds": "Unix-tid (sekunder)",
  "tools.ts.millis": "Unix-tid (millisekunder)",
  "tools.ts.local": "Lokal tid",
- "tools.ts.unreadable": "Det er ikke en dato eller et tidsstempel."
+ "tools.ts.unreadable": "Det er ikke en dato eller et tidsstempel.",
+ "cmd.file.openLarge": "Åpne i storfil-visning …",
+ "large.pick": "Velg en fil som skal åpnes i storfil-visning",
+ "large.viewport": "Innhold i stor fil (skrivebeskyttet)",
+ "large.banner": "Skrivebeskyttet visning av en stor fil",
+ "large.lines": "{n} linjer",
+ "large.indexing": "Indekserer {pct} % · omtrent {n} linjer",
+ "large.notIndexed": "Denne delen av fila er ikke indeksert ennå ({pct} %). Den vises når indekseringen kommer dit.",
+ "large.cut": "… (linja er kuttet)",
+ "large.pos": "Ln {line} av {total}",
+ "large.readOnlyShort": "Skrivebeskyttet",
+ "large.readOnly": "Store filer er skrivebeskyttet.",
+ "large.notAvailable": "Den kommandoen er ikke tilgjengelig i storfil-visningen.",
+ "large.counting": "Teller …",
+ "large.searching": "Søker …",
+ "large.wrapped": "Søket startet på nytt fra begynnelsen av fila."
 }

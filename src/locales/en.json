@@ -486,5 +486,20 @@
  "tools.ts.seconds": "Unix time (seconds)",
  "tools.ts.millis": "Unix time (milliseconds)",
  "tools.ts.local": "Local time",
- "tools.ts.unreadable": "That is not a date or timestamp."
+ "tools.ts.unreadable": "That is not a date or timestamp.",
+ "cmd.file.openLarge": "Open in Large File Viewer…",
+ "large.pick": "Choose a file to open in the large file viewer",
+ "large.viewport": "Large file contents (read-only)",
+ "large.banner": "Read-only view of a large file",
+ "large.lines": "{n} lines",
+ "large.indexing": "Indexing {pct}% · about {n} lines",
+ "large.notIndexed": "This part of the file has not been indexed yet ({pct}%). It appears when indexing gets there.",
+ "large.cut": "… (line cut)",
+ "large.pos": "Ln {line} of {total}",
+ "large.readOnlyShort": "Read-only",
+ "large.readOnly": "Large files are read-only.",
+ "large.notAvailable": "That command isn't available in the large file viewer.",
+ "large.counting": "Counting…",
+ "large.searching": "Searching…",
+ "large.wrapped": "Search wrapped around the file."
 }

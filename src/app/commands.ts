@@ -1,5 +1,6 @@
 import { copyLineDown, deleteLine, moveLineDown, moveLineUp, redo, selectAll, toggleBlockComment, toggleComment, undo } from "@codemirror/commands";
 import { EditorSelection } from "@codemirror/state";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { findNext, findPrevious, getSearchQuery, openSearchPanel, selectNextOccurrence } from "@codemirror/search";
 import type { EditorView } from "@codemirror/view";
 import { addBookmarkLines, bookmarkedLines, bookmarkedText, clearBookmarks, invertBookmarks, jumpBookmark, removeLines, toggleBookmarkAt } from "../editor/bookmarks";
@@ -61,6 +62,12 @@ async function quickOpen(): Promise<void> {
 }
 
 async function gotoLine(): Promise<void> {
+  const lv = workspace.largeViewer();
+  if (lv) {
+    const n = await promptNumber(t("cmd.edit.gotoLine"), t("status.lineRange", { max: lv.totalLines.toLocaleString() }), 1, lv.totalLines);
+    if (n !== null) lv.goToLine(n);
+    return;
+  }
   const n = await promptNumber(t("cmd.edit.gotoLine"), t("status.lineRange", { max: view().state.doc.lines }), 1, view().state.doc.lines);
   if (n !== null) workspace.goTo(n, 0);
 }
@@ -123,6 +130,10 @@ const handlers: Record<string, () => void | Promise<void>> = {
   "file.new": () => void workspace.newDoc(),
   "file.open": () => workspace.openDialog(),
   "file.quickOpen": quickOpen,
+  "file.openLarge": async () => {
+    const sel = await openDialog({ multiple: false, directory: false, title: t("large.pick") });
+    if (typeof sel === "string") await workspace.openPaths([sel], undefined, true);
+  },
   "file.save": () => void (active() && workspace.save(active()!)),
   "file.saveAs": () => void (active() && workspace.saveAs(active()!)),
   "file.saveAll": () => void workspace.saveAll(),
@@ -132,10 +143,15 @@ const handlers: Record<string, () => void | Promise<void>> = {
   "edit.undo": cm(undo),
   "edit.redo": cm(redo),
   "edit.selectAll": cm(selectAll),
-  "edit.find": () => { requestReplaceRow(false); openSearchPanel(view()); },
+  "edit.find": () => {
+    const lv = workspace.largeViewer();
+    if (lv) return lv.showFind();
+    requestReplaceRow(false);
+    openSearchPanel(view());
+  },
   "edit.replace": () => { requestReplaceRow(true); openSearchPanel(view()); },
-  "edit.findNext": cm(findNext),
-  "edit.findPrev": cm(findPrevious),
+  "edit.findNext": () => (workspace.largeViewer() ? void workspace.largeViewer()!.find("forward") : cm(findNext)()),
+  "edit.findPrev": () => (workspace.largeViewer() ? void workspace.largeViewer()!.find("backward") : cm(findPrevious)()),
   "edit.findInFiles": () => openFindInFiles(),
   "edit.gotoLine": gotoLine,
   "edit.duplicateLine": cm(copyLineDown),
@@ -221,6 +237,9 @@ const handlers: Record<string, () => void | Promise<void>> = {
   "app.about": () => void toast("Nimble Newt — MIT License — github.com/Ferdinand99/Nimble-Newt", "info", 6000),
 };
 
+/** Commands that make sense for the read-only large-file viewer. */
+const LARGE_OK = /^(file\.|view\.|app\.|lang\.|compare\.files|doc\.follow|edit\.(find|findNext|findPrev|gotoLine)$|tools\.panel|macro\.record)/;
+
 let lastRun = { id: "", at: 0 };
 
 /**
@@ -231,6 +250,7 @@ export function runCommand(id: string): void {
   const now = performance.now();
   if (lastRun.id === id && now - lastRun.at < 80) return;
   lastRun = { id, at: now };
+  if (workspace.active?.large && !LARGE_OK.test(id)) return void toast(t("large.notAvailable"), "info");
   if (recorder.recording && !recorder.playing && MACRO_COMMANDS.has(id)) recorder.push({ t: "cmd", c: id });
   const h = handlers[id];
   if (!h) return;

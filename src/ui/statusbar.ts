@@ -44,6 +44,18 @@ export function initStatusbar(): StatusHandles {
   const render = () => {
     const d = workspace.active;
     if (!d) return;
+    if (d.large?.viewer) {
+      const v = d.large.viewer;
+      pos.textContent = t("large.pos", { line: v.topLine.toLocaleString(), total: v.totalLines.toLocaleString() });
+      sel.textContent = t("large.readOnlyShort");
+      indent.textContent = "";
+      lang.textContent = "";
+      enc.textContent = d.encoding;
+      eol.textContent = d.eol;
+      follow.hidden = !d.follow;
+      follow.textContent = t("follow.pill");
+      return;
+    }
     const st = workspace.view.state;
     const main = st.selection.main;
     const line = st.doc.lineAt(main.head);
