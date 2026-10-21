@@ -37,6 +37,9 @@ function localize(): void {
   if (empty) empty.replaceChildren(h("strong", {}, "Nimble Newt"), h("span", {}, t("empty.hint")));
 }
 
+const stages: Record<string, number> = { scriptStart: Math.round(performance.now()) };
+const mark = (name: string) => (stages[name] = Math.round(performance.now()));
+
 async function boot(): Promise<void> {
   const root = document.documentElement;
   root.classList.add(isMac ? "mac" : "win");
@@ -48,6 +51,7 @@ async function boot(): Promise<void> {
     api.takePendingPaths().catch(() => [] as string[]),
     workspace.loadRecent(),
   ]);
+  mark("dataLoaded");
   const locale = setLocale(settings.value.locale);
   applySettings();
   localize();
@@ -57,15 +61,24 @@ async function boot(): Promise<void> {
   initTabbar();
   const status = initStatusbar();
 
+  mark("mounted");
+  // Show the window as soon as theme and chrome are in place; restoring tabs overlaps with the OS mapping it.
+  const shown = getCurrentWindow().show().then(() => mark("shown"));
   if (settings.value.restoreSession && session.tabs.length) await workspace.restore(session.tabs, session.active);
   if (pending.length) await workspace.openPaths(pending);
   if (workspace.docs.length === 0) workspace.newDoc();
   await workspace.activate(workspace.activeId ?? workspace.docs[0].id);
 
-  // Show the window now (rAF does not run while it is hidden), then report readiness after the first painted frame.
-  await getCurrentWindow().show();
+  mark("restored");
+  // rAF does not run while the window is hidden, so wait for show() before reporting readiness after the first painted frame.
+  await shown;
   workspace.focus();
-  requestAnimationFrame(() => requestAnimationFrame(() => void api.appReady()));
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      mark("painted");
+      void api.appReady(stages);
+    }),
+  );
 
   settings.onChange((_s, changed) => {
     applySettings();
@@ -124,6 +137,11 @@ function wireWindow(): void {
       void workspace.openPaths(p.paths);
     } else overlay.hidden = true;
   });
+
+  // macOS: the traffic lights hide in full screen, so the tab bar needs no inset there.
+  const win = getCurrentWindow();
+  const syncFullscreen = () => void win.isFullscreen().then((f) => document.documentElement.classList.toggle("fullscreen", f)).catch(() => {});
+  void win.onResized(syncFullscreen);
 
   window.addEventListener("focus", () => void workspace.checkExternal());
   document.addEventListener("visibilitychange", () => {

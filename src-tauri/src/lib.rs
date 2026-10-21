@@ -146,16 +146,24 @@ fn set_locale(app: AppHandle, locale: String) -> CmdResult<()> {
 }
 
 /// Called by the frontend once the first tab is painted. Records cold-start time
-/// (process `run()` to usable window); with `NIMBLE_STARTUP_REPORT=<file>` it writes the number and quits.
+/// (process `run()` to usable window) plus the part spent in the page (`frontend_ms`).
+/// With `NIMBLE_STARTUP_REPORT=<file>` it writes the numbers there and quits.
 #[tauri::command]
-fn app_ready(app: AppHandle) {
+fn app_ready(app: AppHandle, frontend_ms: f64, stages: serde_json::Value) {
     let ms = START
         .get()
         .map(|s| s.elapsed().as_secs_f64() * 1000.0)
         .unwrap_or(0.0);
-    eprintln!("nimble-newt: ready in {ms:.0} ms");
+    eprintln!(
+        "nimble-newt: ready in {ms:.0} ms (page load to ready: {frontend_ms:.0} ms) {stages}"
+    );
     if let Ok(path) = std::env::var("NIMBLE_STARTUP_REPORT") {
-        let _ = std::fs::write(path, format!("{{\"startup_ms\":{ms:.1}}}"));
+        let _ = std::fs::write(
+            path,
+            format!(
+                "{{\"startup_ms\":{ms:.1},\"frontend_ms\":{frontend_ms:.1},\"stages\":{stages}}}"
+            ),
+        );
         app.exit(0);
     }
 }
@@ -321,6 +329,17 @@ pub fn run() {
             );
             app.state::<Pending>().paths.lock().unwrap().extend(args);
             app.set_menu(menu::build(app.handle(), "en")?)?;
+            // The window starts hidden and the frontend shows it when ready. If the frontend never
+            // gets that far, show it anyway so the user is not left with an invisible process.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(6));
+                if let Some(w) = handle.get_webview_window("main") {
+                    if !w.is_visible().unwrap_or(true) {
+                        let _ = w.show();
+                    }
+                }
+            });
             app.on_menu_event(|app, event| {
                 let id = event.id().as_ref();
                 if id == "file.quit" {

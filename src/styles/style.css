@@ -791,7 +791,7 @@ dialog {
 .workspace .cm-editor .cm-gutters {
   border: 0;
   background: var(--bg);
-  color: var(--faint);
+  color: var(--muted);
 }
 .workspace .cm-editor .cm-lineNumbers .cm-gutterElement {
   padding: 0 10px 0 14px;
@@ -1002,7 +1002,7 @@ dialog {
   display: inline-block;
   min-width: 4ch;
   margin-inline-end: 8px;
-  color: var(--faint);
+  color: var(--muted);
   text-align: end;
 }
 .fif-match mark {

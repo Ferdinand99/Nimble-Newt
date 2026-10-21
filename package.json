@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:unsigned": "tauri build --config src-tauri/tauri.unsigned.conf.json"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

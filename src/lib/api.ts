@@ -107,7 +107,7 @@ export const api = {
   replaceInFolder: (options: SearchOptions, replacement: string, paths: string[]) => invoke<ReplaceReport>("replace_in_folder", { options, replacement, paths }),
   takePendingPaths: () => invoke<string[]>("take_pending_paths"),
   setLocale: (locale: string) => invoke<void>("set_locale", { locale }),
-  appReady: () => invoke<void>("app_ready"),
+  appReady: (stages: Record<string, number>) => invoke<void>("app_ready", { frontendMs: performance.now(), stages }),
   restartApp: () => invoke<void>("restart_app"),
   checkUpdate: () => invoke<UpdateInfo | null>("check_update"),
   installUpdate: (onEvent: (e: DownloadEvent) => void) => {

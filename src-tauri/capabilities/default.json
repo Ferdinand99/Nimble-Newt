@@ -10,6 +10,7 @@
     "core:window:allow-close",
     "core:window:allow-destroy",
     "core:window:allow-is-focused",
+    "core:window:allow-is-fullscreen",
     "core:window:allow-start-dragging",
     "core:window:allow-toggle-maximize",
     "dialog:default",

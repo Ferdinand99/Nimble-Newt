@@ -56,8 +56,9 @@ export async function checkForUpdates(manual: boolean): Promise<void> {
     else toast(t("update.available", { version: info.version }), "info", 8000);
   } catch (e) {
     const f = asFailure(e);
-    // Unconfigured builds (development, forks) should not nag on every start.
-    if (manual || (f.kind !== "notConfigured" && f.kind !== "offline")) toast(failureMessage(f), manual || f.kind === "invalidSignature" ? "error" : "warning", 8000);
+    // Automatic checks stay quiet about network trouble, missing releases and unconfigured builds;
+    // a bad signature is always worth knowing about.
+    if (manual || f.kind === "invalidSignature") toast(failureMessage(f), "error", 8000);
     if (!manual) console.warn("update check failed:", f);
   } finally {
     busy = false;
