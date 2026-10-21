@@ -1,0 +1,94 @@
+# Checks macOS code signing and notarization without publishing anything: builds the
+# universal app with the APPLE_* secrets (same setup as the release workflow), then
+# verifies the signature, the hardened runtime, Gatekeeper acceptance and the stapled
+# notarization ticket. Run it from the Actions tab after changing certificates or keys.
+# It also runs once when this file changes, so a new setup is tested before merging.
+name: macOS signing check
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/macos-signing.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    name: Sign and notarize (macOS)
+    runs-on: macos-latest
+    env:
+      IN_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      IN_APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      IN_APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      IN_APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      IN_APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      IN_APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: macos-signing
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Configure signing and notarization
+        run: |
+          missing=""
+          for v in IN_APPLE_CERTIFICATE IN_APPLE_CERTIFICATE_PASSWORD IN_APPLE_SIGNING_IDENTITY \
+                   IN_APPLE_API_ISSUER IN_APPLE_API_KEY IN_APPLE_API_KEY_CONTENT; do
+            [ -n "${!v}" ] || missing="$missing ${v#IN_}"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error title=Missing secrets::Set these repository secrets (see docs/signing.md):$missing"
+            exit 1
+          fi
+          key_path="$RUNNER_TEMP/AuthKey_${IN_APPLE_API_KEY}.p8"
+          printf '%s' "$IN_APPLE_API_KEY_CONTENT" > "$key_path"
+          {
+            echo "APPLE_CERTIFICATE=$IN_APPLE_CERTIFICATE"
+            echo "APPLE_CERTIFICATE_PASSWORD=$IN_APPLE_CERTIFICATE_PASSWORD"
+            echo "APPLE_SIGNING_IDENTITY=$IN_APPLE_SIGNING_IDENTITY"
+            echo "APPLE_API_ISSUER=$IN_APPLE_API_ISSUER"
+            echo "APPLE_API_KEY=$IN_APPLE_API_KEY"
+            echo "APPLE_API_KEY_PATH=$key_path"
+          } >> "$GITHUB_ENV"
+
+      - name: Build, sign and notarize
+        run: npx tauri build --target universal-apple-darwin --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Verify
+        run: |
+          APP="target/universal-apple-darwin/release/bundle/macos/Nimble Newt.app"
+          DMG=$(find target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' | head -1)
+          set -x
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign --display --verbose=4 "$APP" 2>&1 | grep -E 'Authority|TeamIdentifier|Timestamp|flags'
+          codesign --display --verbose=4 "$APP" 2>&1 | grep -q 'flags=.*runtime'
+          spctl --assess --type execute --verbose=4 "$APP"
+          xcrun stapler validate "$APP"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG" \
+            || echo "::warning::The DMG itself is not signed; the app inside it is."
+          {
+            echo "### macOS signing check"
+            echo
+            echo '```'
+            codesign --display --verbose=2 "$APP" 2>&1 | grep -E 'Authority|TeamIdentifier'
+            spctl --assess --type execute --verbose=4 "$APP" 2>&1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nimble-newt-macos-signed
+          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error

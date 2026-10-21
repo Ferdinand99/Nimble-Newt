@@ -44,6 +44,16 @@ base64 -w0 certificate.p12                            # Linux
 
 If the certificate is present but no notarization credentials are, the app is signed but not notarized (Gatekeeper still warns).
 
+Checking the setup: the **macOS signing check** workflow (`.github/workflows/macos-signing.yml`, Actions → Run workflow) builds, signs and notarizes the app with these secrets and verifies the signature, hardened runtime, Gatekeeper acceptance and stapled ticket, without publishing anything. Run it after renewing the certificate or the API key.
+
+The identity contains your name; if it has non-ASCII letters (æ, ø, å), do not type it on a Git Bash command line, which mangles them. Read it from the certificate instead:
+
+```sh
+openssl x509 -in devid.pem -noout -subject -nameopt RFC2253,-esc_msb \
+  | sed -n 's/.*CN=\([^,]*\).*/\1/p' | tr -d '\n' > identity.txt
+gh secret set APPLE_SIGNING_IDENTITY < identity.txt
+```
+
 ## Windows
 
 | Secret | Value |
