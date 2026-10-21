@@ -1,5 +1,5 @@
 import { api, type Encoding, type Eol } from "./api";
-import { type LocalePref } from "./i18n";
+import { LOCALE_CODES, type LocalePref } from "./i18n";
 import { clamp } from "./logic";
 
 export interface Settings {
@@ -45,7 +45,7 @@ export function normalize(raw: unknown): Settings {
   const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) ? clamp(Math.round(v), lo, hi) : d);
   return {
     theme: pick(r.theme, ["system", "light", "dark"], DEFAULTS.theme),
-    locale: pick(r.locale, ["auto", "en", "nb"], DEFAULTS.locale),
+    locale: pick(r.locale, ["auto", ...LOCALE_CODES] as LocalePref[], DEFAULTS.locale),
     fontSize: num(r.fontSize, DEFAULTS.fontSize, FONT_MIN, FONT_MAX),
     tabSize: num(r.tabSize, DEFAULTS.tabSize, 1, 16),
     insertSpaces: bool(r.insertSpaces, DEFAULTS.insertSpaces),

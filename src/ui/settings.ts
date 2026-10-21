@@ -2,7 +2,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { checkForUpdates } from "../app/updater";
 import { EOLS, listEncodings } from "../lib/api";
 import { h } from "../lib/dom";
-import { t } from "../lib/i18n";
+import { LOCALE_CODES, LOCALES, t } from "../lib/i18n";
 import { FONT_MAX, FONT_MIN, settings, type Settings } from "../lib/settings";
 import { openSheet } from "./dialog";
 
@@ -24,7 +24,7 @@ function toggle(key: { [K in keyof Settings]: Settings[K] extends boolean ? K : 
   return h("label", { class: "switch" }, input, h("span", { class: "switch-ui" }));
 }
 
-function select<K extends "defaultEncoding" | "defaultEol">(key: K, values: readonly string[], label: string, text: (v: string) => string = (v) => v, groups?: Map<string, string[]>): HTMLElement {
+function select<K extends "defaultEncoding" | "defaultEol" | "locale">(key: K, values: readonly string[], label: string, text: (v: string) => string = (v) => v, groups?: Map<string, string[]>): HTMLElement {
   const sel = h("select", { class: "input", style: "width:auto", "aria-label": label });
   const opt = (v: string) => h("option", { value: v, selected: settings.value[key] === v }, text(v));
   if (groups) {
@@ -61,7 +61,7 @@ export async function openSettings(): Promise<void> {
     h("div", { class: "group-title" }, t("settings.appearance")),
     list(
       row(t("settings.theme"), segmented("theme", [["system", t("settings.themeSystem")], ["light", t("settings.themeLight")], ["dark", t("settings.themeDark")]], t("settings.theme"))),
-      row(t("settings.language"), segmented("locale", [["auto", t("settings.langAuto")], ["en", "English"], ["nb", "Norsk"]], t("settings.language")), t("settings.languageHint")),
+      row(t("settings.language"), select("locale", ["auto", ...LOCALE_CODES], t("settings.language"), (v) => (v === "auto" ? t("settings.langAuto") : (LOCALES.find((l) => l.code === v)?.name ?? v))), t("settings.languageHint")),
       row(t("settings.fontSize"), stepper("fontSize", FONT_MIN, FONT_MAX, t("settings.fontSize"))),
     ),
     h("div", { class: "group-title" }, t("settings.editing")),

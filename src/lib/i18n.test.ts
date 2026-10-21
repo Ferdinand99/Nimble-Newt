@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import en from "../locales/en.json";
 import nb from "../locales/nb.json";
-import { resolveLocale } from "./i18n";
+import { LOCALES, matchLocale, resolveLocale } from "./i18n";
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {
@@ -51,5 +51,15 @@ describe("locales", () => {
     expect(resolveLocale("auto", "nb-NO")).toBe("nb");
     expect(resolveLocale("auto", "en-US")).toBe("en");
     expect(resolveLocale("nb")).toBe("nb");
+  });
+  it("maps system language tags to shipped locales", () => {
+    const cases: [string, string][] = [
+      ["pt-PT", "pt-PT"], ["pt", "pt-BR"], ["pt_BR", "pt-BR"], ["zh-Hans-CN", "zh-CN"], ["zh-Hant-TW", "zh-TW"], ["zh-HK", "zh-TW"],
+      ["zh", "zh-CN"], ["no", "nb"], ["nn-NO", "nb"], ["de-AT", "de"], ["FR-ca", "fr"], ["ar-EG", "ar"], ["xx", "en"], ["", "en"],
+    ];
+    for (const [tag, want] of cases) expect(matchLocale(tag), tag).toBe(want);
+  });
+  it("marks Arabic, Persian and Hebrew right-to-left", () => {
+    expect(LOCALES.filter((l) => l.rtl).map((l) => l.code)).toEqual(["ar", "fa", "he"]);
   });
 });

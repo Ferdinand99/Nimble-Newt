@@ -45,7 +45,7 @@ Notepad++ simplicity, a clean Apple-inspired design, and a small native app buil
 - **Tools.** Format and minify JSON / XML, Base64 / URL / HTML / hex encoding, MD5 / SHA checksums for text or files, timestamp conversion and UUIDs, from a tools panel.
 - **Extensions.** Small sandboxed add-ons that contribute commands and text tools, with explicit permissions and no file or network access ([docs/extensions.md](docs/extensions.md)). Three are built in: Word Count, Markdown Helpers and Text Cleaner.
 - **Command palette** (Ctrl/Cmd+Shift+P) with every action, and **quick open** for recent files.
-- **Settings.** Theme (system / light / dark), language (English, Norwegian Bokmål), font size, tabs or spaces, default encoding and line ending, word wrap, whitespace, session restore, automatic updates.
+- **Settings.** Theme (system / light / dark), interface language (26, chosen automatically from the system or set by hand), font size, tabs or spaces, default encoding and line ending, word wrap, whitespace, session restore, automatic updates.
 - **Status bar.** Line/column, selection, indentation, language, encoding and line endings; everything is clickable.
 - **Automatic updates** from GitHub Releases, with signature verification (see [Updates](#updates)).
 - **Accessible by default.** Keyboard navigation everywhere, visible focus, `prefers-reduced-motion`, `prefers-contrast` and `prefers-reduced-transparency` respected, syntax colours that meet WCAG AA contrast.
@@ -162,7 +162,9 @@ This is **not yet the < 300 ms target**: roughly 0.3 s is process and webview st
 
 ## Translating
 
-UI strings live in `src/locales/<code>.json` (English is the source, Norwegian Bokmål `nb` is included) and native menu labels use the same files (`menu.*` keys). To add a language: copy `en.json`, translate the values (keep `{placeholders}`), register it in `src/lib/i18n.ts` and `src-tauri/src/menu.rs`, and add it to the language setting. `npm test` checks that every key exists in every language.
+UI strings live in `src/locales/<code>.json`; English is the source and there are 25 translations (ar, cs, da, de, es, fa, fi, fr, he, hu, it, ja, ko, nb, nl, pl, pt-BR, pt-PT, ro, ru, sv, tr, uk, zh-CN, zh-TW). Arabic, Persian and Hebrew mirror the interface; code and file content stay left-to-right. Native menu labels use the same files (`menu.*` and `cmd.*` keys). The translations were machine-written and have not been reviewed by native speakers, so corrections are very welcome.
+
+To fix or add a language: edit or copy `en.json`, translate the values (keep `{placeholders}`), add it to `LOCALES` in `src/lib/i18n.ts` and to the list in `src-tauri/src/menu.rs`. `npm test` fails unless every language has exactly the English keys and the same placeholders.
 
 ## Roadmap
 

@@ -1294,3 +1294,10 @@ dialog {
     border: 1px solid ButtonText;
   }
 }
+
+/* Right-to-left interface languages mirror the chrome; code and file content stay left-to-right. */
+:root[dir="rtl"] .workspace .cm-editor,
+:root[dir="rtl"] .lv-lines,
+:root[dir="rtl"] .compare .cm-editor {
+  direction: ltr;
+}

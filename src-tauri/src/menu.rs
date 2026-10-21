@@ -11,7 +11,34 @@ use tauri::menu::{
 use tauri::{AppHandle, Wry};
 
 const EN: &str = include_str!("../../src/locales/en.json");
-const NB: &str = include_str!("../../src/locales/nb.json");
+/// Every shipped interface language, compiled in so the native menu can follow the app language.
+const LOCALES: &[(&str, &str)] = &[
+    ("ar", include_str!("../../src/locales/ar.json")),
+    ("cs", include_str!("../../src/locales/cs.json")),
+    ("da", include_str!("../../src/locales/da.json")),
+    ("de", include_str!("../../src/locales/de.json")),
+    ("es", include_str!("../../src/locales/es.json")),
+    ("fa", include_str!("../../src/locales/fa.json")),
+    ("fi", include_str!("../../src/locales/fi.json")),
+    ("fr", include_str!("../../src/locales/fr.json")),
+    ("he", include_str!("../../src/locales/he.json")),
+    ("hu", include_str!("../../src/locales/hu.json")),
+    ("it", include_str!("../../src/locales/it.json")),
+    ("ja", include_str!("../../src/locales/ja.json")),
+    ("ko", include_str!("../../src/locales/ko.json")),
+    ("nb", include_str!("../../src/locales/nb.json")),
+    ("nl", include_str!("../../src/locales/nl.json")),
+    ("pl", include_str!("../../src/locales/pl.json")),
+    ("pt-BR", include_str!("../../src/locales/pt-BR.json")),
+    ("pt-PT", include_str!("../../src/locales/pt-PT.json")),
+    ("ro", include_str!("../../src/locales/ro.json")),
+    ("ru", include_str!("../../src/locales/ru.json")),
+    ("sv", include_str!("../../src/locales/sv.json")),
+    ("tr", include_str!("../../src/locales/tr.json")),
+    ("uk", include_str!("../../src/locales/uk.json")),
+    ("zh-CN", include_str!("../../src/locales/zh-CN.json")),
+    ("zh-TW", include_str!("../../src/locales/zh-TW.json")),
+];
 const COMMANDS: &str = include_str!("../../src/app/commands.json");
 
 #[derive(Deserialize)]
@@ -51,10 +78,33 @@ fn parse(s: &str) -> HashMap<String, String> {
         .collect()
 }
 
+fn raw_locale(locale: &str) -> Option<&'static str> {
+    let l = locale.replace('_', "-").to_lowercase();
+    let base = l.split('-').next().unwrap_or("");
+    let code = LOCALES
+        .iter()
+        .find(|(c, _)| c.to_lowercase() == l)
+        .map(|(c, _)| *c)
+        .or(match base {
+            "no" | "nn" => Some("nb"),
+            "zh" if ["hant", "tw", "hk", "mo"].iter().any(|p| l.contains(p)) => Some("zh-TW"),
+            "zh" => Some("zh-CN"),
+            "pt" => Some("pt-BR"),
+            _ => LOCALES
+                .iter()
+                .map(|(c, _)| *c)
+                .find(|c| c.to_lowercase() == base),
+        })?;
+    LOCALES
+        .iter()
+        .find(|(c, _)| *c == code)
+        .map(|(_, raw)| *raw)
+}
+
 fn table(locale: &str) -> HashMap<String, String> {
     let mut t = parse(EN);
-    if locale.starts_with("nb") || locale.starts_with("no") || locale.starts_with("nn") {
-        t.extend(parse(NB));
+    if let Some(raw) = raw_locale(locale) {
+        t.extend(parse(raw));
     }
     t
 }
@@ -253,7 +303,7 @@ mod tests {
             subs.push(top.id.as_str());
             leaves(&top.items, &mut ids, &mut subs);
         }
-        for t in [table("en"), table("nb")] {
+        for t in LOCALES.iter().map(|(c, _)| table(c)).chain([table("en")]) {
             for id in &ids {
                 assert!(known.contains(id), "menu entry {id} is not in commands");
                 assert!(label(&t, id).is_some(), "no label for {id}");
@@ -266,7 +316,11 @@ mod tests {
             }
         }
         // Both locale files carry every key (checked on the raw files, not the merged table).
-        for (name, raw) in [("en", parse(EN)), ("nb", parse(NB))] {
+        for (name, raw) in LOCALES
+            .iter()
+            .map(|(c, r)| (*c, parse(r)))
+            .chain([("en", parse(EN))])
+        {
             for id in ids.iter().chain(subs.iter()) {
                 assert!(
                     raw.contains_key(&format!("menu.{id}"))

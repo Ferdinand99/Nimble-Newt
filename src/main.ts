@@ -58,7 +58,7 @@ async function boot(): Promise<void> {
     workspace.loadRecent(),
   ]);
   mark("dataLoaded");
-  const locale = setLocale(settings.value.locale);
+  const locale = await setLocale(settings.value.locale);
   applySettings();
   localize();
   void api.setLocale(locale).catch(() => {});
