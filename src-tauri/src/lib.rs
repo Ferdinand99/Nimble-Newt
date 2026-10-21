@@ -145,6 +145,31 @@ async fn doc_write(store: State<'_, SessionStore>, name: String, json: String) -
     store.write_doc(&name, &json).map_err(err)
 }
 
+// ---- user-defined languages ------------------------------------------------
+
+/// Validates a JSON or TOML definition and returns it normalised as JSON.
+#[tauri::command]
+async fn parse_language_definition(text: String, format: String) -> CmdResult<String> {
+    let format: nimble_core::userlang::Format = format.parse().map_err(err)?;
+    let def = nimble_core::userlang::parse_definition(&text, format).map_err(err)?;
+    nimble_core::userlang::to_json(&def).map_err(err)
+}
+
+/// Converts a definition (JSON) to "json" or "toml" for export.
+#[tauri::command]
+async fn serialize_language_definition(json: String, format: String) -> CmdResult<String> {
+    let format: nimble_core::userlang::Format = format.parse().map_err(err)?;
+    let def = nimble_core::userlang::parse_definition(&json, nimble_core::userlang::Format::Json)
+        .map_err(err)?;
+    nimble_core::userlang::serialize(&def, format).map_err(err)
+}
+
+/// The commented starter template (TOML).
+#[tauri::command]
+fn language_template() -> String {
+    nimble_core::userlang::starter_template()
+}
+
 // ---- search --------------------------------------------------------------
 
 #[tauri::command]
@@ -403,6 +428,9 @@ pub fn run() {
             doc_read,
             doc_write,
             search_folder,
+            parse_language_definition,
+            serialize_language_definition,
+            language_template,
             replace_in_folder,
             take_pending_paths,
             set_locale,

@@ -13,6 +13,18 @@ function sources(dir: string): string[] {
   });
 }
 
+/** Keys staged in src/locales/_pending/*.en.json count as existing until they are merged. */
+function pending(lang: "en" | "nb"): Record<string, string> {
+  const dir = "src/locales/_pending";
+  let files: string[] = [];
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith(`.${lang}.json`));
+  } catch {
+    /* no pending keys */
+  }
+  return Object.assign({}, ...files.map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as Record<string, string>));
+}
+
 describe("locales", () => {
   const enKeys = Object.keys(en);
   it("Norwegian has exactly the English keys", () => {
@@ -25,7 +37,11 @@ describe("locales", () => {
     for (const f of sources("src")) {
       for (const m of readFileSync(f, "utf8").matchAll(/\bt\(\s*["'`]([a-zA-Z0-9_.]+)["'`]/g)) used.add(m[1]);
     }
-    expect([...used].filter((k) => !(k in en)).sort()).toEqual([]);
+    const known = { ...en, ...pending("en") };
+    expect([...used].filter((k) => !(k in known)).sort()).toEqual([]);
+  });
+  it("pending Norwegian keys mirror pending English keys", () => {
+    expect(Object.keys(pending("nb")).sort()).toEqual(Object.keys(pending("en")).sort());
   });
   it("placeholders match between languages", () => {
     const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join();

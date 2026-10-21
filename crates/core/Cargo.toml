@@ -15,6 +15,7 @@ regex = "1"
 globset = "0.4"
 thiserror = "2"
 semver = "1"
+toml = "0.8"
 
 [dev-dependencies]
 tempfile = "3"

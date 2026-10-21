@@ -6,6 +6,7 @@ pub mod fileio;
 pub mod search;
 pub mod session;
 pub mod update;
+pub mod userlang;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
