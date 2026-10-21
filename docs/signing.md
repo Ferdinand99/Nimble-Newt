@@ -5,7 +5,7 @@ This is independent from [update signing](updates.md). Update signing (Tauri key
 ## Unsigned builds: what users see
 
 - **macOS (Gatekeeper):** "Nimble Newt cannot be opened because the developer cannot be verified" (or "is damaged"). Users can right-click the app → Open → Open, or go to System Settings → Privacy & Security → "Open Anyway". If it reports "damaged": `xattr -dr com.apple.quarantine "/Applications/Nimble Newt.app"`.
-- **Windows (SmartScreen):** "Windows protected your PC". Users click **More info** → **Run anyway**. Reputation builds up over time for OV certificates; EV certificates get it immediately.
+- **Windows (SmartScreen):** "Windows protected your PC". Users click **More info** → **Run anyway**. With a certificate, reputation builds up over time for the publisher instead of starting over with every new file; since 2024 EV certificates no longer get it immediately either.
 
 Auto-updates still work for unsigned builds (they are verified with the Tauri update key).
 
@@ -68,6 +68,7 @@ The workflow imports the PFX into the runner's certificate store, then writes a 
 Note: since June 2023 publicly trusted code signing keys must live on hardware (HSM/token) or a cloud service, so a downloadable `.pfx` is mainly available from older certificates or some resellers. Alternatives:
 
 - **Azure Trusted Signing (Artifact Signing):** cheap, no hardware; needs a custom `bundle.windows.signCommand` in the Tauri config calling the signing client instead of the PFX steps.
-- **EV certificate / cloud HSM (e.g. DigiCert KeyLocker, SSL.com eSigner):** immediate SmartScreen reputation; also integrated via `signCommand`.
+- **OV/EV certificate in a cloud HSM (e.g. DigiCert KeyLocker, SSL.com eSigner):** also integrated via `signCommand`.
+- **SignPath Foundation:** free signing for open source projects (the publisher shown is "SignPath Foundation"); signing requests are approved per release.
 
 These alternatives are not wired up in the workflow.

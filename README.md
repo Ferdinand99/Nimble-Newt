@@ -9,6 +9,7 @@ Notepad++ simplicity, a clean Apple-inspired design, and a small native app buil
 
 [![CI](https://github.com/Ferdinand99/Nimble-Newt/actions/workflows/ci.yml/badge.svg)](https://github.com/Ferdinand99/Nimble-Newt/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Website](https://img.shields.io/badge/website-ferdinand99.github.io%2FNimble--Newt-black.svg)](https://ferdinand99.github.io/Nimble-Newt/)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/editor-dark.png">
@@ -50,7 +51,7 @@ Get the latest installer from the [Releases page](https://github.com/Ferdinand99
 | Windows 10/11 (x64) | `.exe` (NSIS) or `.msi` |
 | macOS 11+ (Apple Silicon and Intel) | `.dmg` (universal) |
 
-Until the owner has set up code signing ([docs/signing.md](docs/signing.md)), builds are unsigned: macOS Gatekeeper and Windows SmartScreen will warn on first launch (right-click → Open on macOS, **More info → Run anyway** on Windows).
+The macOS build is signed and notarized. The Windows build is not code-signed yet ([docs/signing.md](docs/signing.md)), so SmartScreen warns on first launch: click **More info → Run anyway**.
 
 ## Updates
 

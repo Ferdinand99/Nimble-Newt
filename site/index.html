@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'sha256-WZRJfWvsnNCPcxzZwvyhovnZGqhZaC+8gPGPRbx6wTk='; style-src 'self'; img-src 'self'; font-src 'self'; connect-src https://api.github.com; base-uri 'self'; form-action 'none'"
+    />
+    <title>Nimble Newt — a fast, modern text editor for Windows and macOS</title>
+    <meta
+      name="description"
+      content="Nimble Newt is a free, open-source text editor for Windows and macOS: Notepad++ simplicity with a clean, Apple-inspired design. Tabs that survive restarts, encodings, find in files, multiple cursors. Built with Rust and Tauri."
+    />
+    <script>document.documentElement.classList.add("js");</script>
+    <link rel="canonical" href="https://ferdinand99.github.io/Nimble-Newt/" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="favicon.png" type="image/png" sizes="48x48" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0b0b0d" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ferdinand99.github.io/Nimble-Newt/" />
+    <meta property="og:site_name" content="Nimble Newt" />
+    <meta property="og:title" content="Nimble Newt — a fast, modern text editor for Windows and macOS" />
+    <meta
+      property="og:description"
+      content="Notepad++ simplicity with a clean, Apple-inspired design. Free and open source, built with Rust and Tauri."
+    />
+    <meta property="og:image" content="https://ferdinand99.github.io/Nimble-Newt/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Nimble Newt: the lime newt logo and the tagline “A fast, modern text editor”, next to the editor showing a Rust file in the dark theme." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Nimble Newt — a fast, modern text editor for Windows and macOS" />
+    <meta
+      name="twitter:description"
+      content="Notepad++ simplicity with a clean, Apple-inspired design. Free and open source, built with Rust and Tauri."
+    />
+    <meta name="twitter:image" content="https://ferdinand99.github.io/Nimble-Newt/og-image.png" />
+    <link rel="preload" href="fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Nimble Newt",
+        "description": "A fast, modern, open-source text editor for Windows and macOS with Notepad++ simplicity and a clean, Apple-inspired design.",
+        "url": "https://ferdinand99.github.io/Nimble-Newt/",
+        "downloadUrl": "https://github.com/Ferdinand99/Nimble-Newt/releases/latest",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Windows 10, Windows 11, macOS 11 or later",
+        "image": "https://ferdinand99.github.io/Nimble-Newt/og-image.png",
+        "license": "https://github.com/Ferdinand99/Nimble-Newt/blob/main/LICENSE",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "sameAs": ["https://github.com/Ferdinand99/Nimble-Newt"]
+      }
+    </script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <svg width="0" height="0" class="vh" aria-hidden="true" focusable="false">
+      <symbol id="gh" viewBox="0 0 16 16">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+      </symbol>
+    </svg>
+
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="topbar" id="top">
+      <div class="wrap topbar-inner">
+        <a class="brand" href="#top">
+          <img src="favicon.svg" alt="" width="28" height="28" />
+          <span>Nimble Newt</span>
+        </a>
+
+        <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="topnav" hidden>
+          <span></span><span></span>
+        </button>
+
+        <nav class="topnav" id="topnav" aria-label="Main">
+          <a class="topnav-link" href="#features">Features</a>
+          <a class="topnav-link" href="#compare">Compare</a>
+          <a class="topnav-link" href="#download">Download</a>
+          <a class="topnav-link" href="#faq">FAQ</a>
+          <a class="topnav-link" href="https://github.com/Ferdinand99/Nimble-Newt#readme">Docs</a>
+          <a class="btn btn-ghost btn-sm" href="https://github.com/Ferdinand99/Nimble-Newt" aria-label="Star Nimble Newt on GitHub">
+            <svg class="gh-mark" aria-hidden="true"><use href="#gh"></use></svg>
+            <span>Star on GitHub</span>
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- Hero ============================================================ -->
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="wrap">
+          <div class="hero-copy">
+            <div class="hero-icon">
+              <picture>
+                <source type="image/webp" srcset="assets/icon-192.webp" />
+                <img src="assets/icon-192.png" width="96" height="96" alt="" />
+              </picture>
+            </div>
+            <a class="live-pill" id="release-pill" href="https://github.com/Ferdinand99/Nimble-Newt/releases/latest">
+              <span class="dot is-live" aria-hidden="true"></span>
+              <span id="release-pill-label">Latest release on GitHub</span>
+              <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"></use></svg>
+            </a>
+            <h1 class="display" id="hero-title">A fast, modern text editor.</h1>
+            <p class="lead">
+              Nimble Newt brings Notepad++ simplicity to Windows and macOS, with a clean, Apple-inspired
+              design. A small native app, built with Rust and Tauri.
+            </p>
+            <p class="hero-fine">Free and open source. Installers from about 3&nbsp;MB.</p>
+            <div class="hero-actions">
+              <a class="btn btn-primary btn-lg" href="#download" id="hero-download">
+                <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#download"></use></svg>
+                <span>Download</span>
+              </a>
+              <a class="btn btn-ghost btn-lg" href="https://github.com/Ferdinand99/Nimble-Newt">
+                <svg class="gh-mark" aria-hidden="true"><use href="#gh"></use></svg>
+                View on GitHub
+              </a>
+            </div>
+            <p class="hero-meta"><span>MIT licensed</span><span>Built in Rust</span><span>Light and dark</span></p>
+          </div>
+
+          <figure class="hero-shot">
+            <div class="frame">
+              <picture>
+                <source media="(prefers-color-scheme: light)" type="image/webp" srcset="assets/editor-light.webp" />
+                <source media="(prefers-color-scheme: light)" srcset="assets/editor-light.png" />
+                <source type="image/webp" srcset="assets/editor-dark.webp" />
+                <img
+                  src="assets/editor-dark.png"
+                  width="1100"
+                  height="740"
+                  fetchpriority="high"
+                  alt="Nimble Newt editing demo.rs, a small Rust word counter, with tabs for notes.md and package.json, syntax highlighting, line numbers, and a status bar reading Ln 1, Col 1, Spaces: 4, Rust, UTF-8 and LF."
+                />
+              </picture>
+            </div>
+            <figcaption>Shown from a Linux development build, hence the menu bar above the tabs.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- Features ======================================================== -->
+      <section class="section" id="features" aria-labelledby="features-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <h2 class="headline" id="features-title">Everything you open a text editor for.</h2>
+            <p class="sub">
+              Open a file, fix it, close it. Nimble Newt keeps the familiar Notepad++ workflow and
+              takes care of the parts that usually go wrong: lost tabs, broken encodings, careless saves.
+            </p>
+          </header>
+
+          <div class="rows">
+            <!-- Sessions -->
+            <article class="row" id="sessions">
+              <div class="row-copy reveal">
+                <h3 class="title">Quit any time. Your tabs come back.</h3>
+                <p>
+                  <strong>Unsaved tabs survive quitting and restarting</strong>, including the ones you
+                  never named. Their content lives in the app’s data folder, never next to your files,
+                  and the cursor and scroll position come back with them.
+                </p>
+                <p>
+                  Open as many tabs as you like, drag them into order, close others or everything to the
+                  right, and bring a closed one back with <kbd>Ctrl</kbd>&nbsp;<kbd>Shift</kbd>&nbsp;<kbd>T</kbd>.
+                  Prefer a clean slate? Switch session restore off in Settings.
+                </p>
+              </div>
+              <div class="row-art reveal">
+                <div
+                  class="mock"
+                  role="img"
+                  aria-label="Illustration of a restored session: notes.md and Untitled 2 come back with their unsaved changes, demo.rs comes back with the cursor at line 12, column 8, and package.json is restored as saved."
+                >
+                  <div class="mock-bar">
+                    <span class="mock-title">After a restart</span>
+                    <span class="pill status-accent"><span class="dot"></span>4 tabs restored</span>
+                  </div>
+                  <ul class="list">
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file"></use></svg></span>
+                        <span class="list-main"><span class="list-title">notes.md</span><span class="list-sub">Unsaved changes, kept</span></span>
+                        <span class="tab-dot"></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file"></use></svg></span>
+                        <span class="list-main"><span class="list-title">Untitled 2</span><span class="list-sub">Never saved, still here</span></span>
+                        <span class="tab-dot"></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file"></use></svg></span>
+                        <span class="list-main"><span class="list-title">demo.rs</span><span class="list-sub">Back at Ln 12, Col 8</span></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file"></use></svg></span>
+                        <span class="list-main"><span class="list-title">package.json</span><span class="list-sub">Saved</span></span>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+
+            <!-- Encodings -->
+            <article class="row row-flip" id="encodings">
+              <div class="row-copy reveal">
+                <h3 class="title">Every byte where you left it.</h3>
+                <p>
+                  Nimble Newt detects <strong>UTF-8</strong> with or without a BOM, <strong>UTF-16</strong>
+                  LE and BE, and <strong>Windows-1252</strong>, and shows it in the status bar. Click it to
+                  convert the file, or to reopen it with another encoding. LF, CRLF and CR work the same way.
+                </p>
+                <p>
+                  Characters the target encoding can’t represent are reported, never silently lost.
+                </p>
+              </div>
+              <div class="row-art reveal">
+                <div
+                  class="mock"
+                  role="img"
+                  aria-label="Illustration of the encoding menu for readme.txt, detected as Windows-1252, offering Convert to UTF-8, Convert to UTF-8 with BOM, Convert to UTF-16 LE and Reopen with UTF-16 BE. Line ending choices LF, CRLF (selected) and CR sit below, above a status bar."
+                >
+                  <div class="mock-bar">
+                    <span class="mock-title">readme.txt</span>
+                    <span class="pill status-info"><span class="dot"></span>Windows-1252</span>
+                  </div>
+                  <ul class="list">
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#refresh"></use></svg></span>
+                        <span class="list-main"><span class="list-title">Convert to UTF-8</span></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#refresh"></use></svg></span>
+                        <span class="list-main"><span class="list-title">Convert to UTF-8 with BOM</span></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#refresh"></use></svg></span>
+                        <span class="list-main"><span class="list-title">Convert to UTF-16 LE</span></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file"></use></svg></span>
+                        <span class="list-main"><span class="list-title">Reopen with UTF-16 BE</span></span>
+                      </div>
+                    </li>
+                  </ul>
+                  <ul class="chips">
+                    <li class="chip">LF (Unix, macOS)</li>
+                    <li class="chip chip-on">CRLF (Windows)</li>
+                    <li class="chip">CR (classic Mac)</li>
+                  </ul>
+                  <div class="statusbar">
+                    <span>Ln 1, Col 1</span><span>Spaces: 4</span><span>Plain text</span><span class="is-active">Windows-1252</span><span>CRLF</span>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <!-- Search -->
+            <article class="row" id="search">
+              <div class="row-copy reveal">
+                <h3 class="title">Find it in one file, or a whole folder.</h3>
+                <p>
+                  Find and replace in the file you’re in, with regular expressions, case and whole-word
+                  options and a live match count.
+                </p>
+                <p>
+                  <strong>Find in Files</strong> searches a folder with regex and glob filters, respects
+                  <code>.gitignore</code>, skips binary files and gives you clickable results. Replace All
+                  shows a <strong>preview first</strong>, and you can leave out any file before anything
+                  is written.
+                </p>
+              </div>
+              <div class="row-art reveal">
+                <div
+                  class="mock"
+                  role="img"
+                  aria-label="Illustration of a Replace in Files preview: replacing load_ followed by a word with read_ across 12 matches in 4 files. src/main.rs, src/config.rs and README.md are ticked; tests/fixtures/old.rs is unticked, so the button reads Replace in 3 files."
+                >
+                  <div class="mock-bar">
+                    <span class="mock-title">Replace in files</span>
+                    <span class="pill">12 matches in 4 files</span>
+                  </div>
+                  <p class="mock-caption"><code>load_(\w+)</code> → <code>read_$1</code> · Regular expression · Respect .gitignore</p>
+                  <ul class="list">
+                    <li>
+                      <div class="list-row">
+                        <span class="check is-on"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg></span>
+                        <span class="list-main"><span class="list-title">src/main.rs</span></span>
+                        <span class="list-value">5 matches</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="check is-on"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg></span>
+                        <span class="list-main"><span class="list-title">src/config.rs</span></span>
+                        <span class="list-value">4 matches</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="check"></span>
+                        <span class="list-main"><span class="list-title">tests/fixtures/old.rs</span></span>
+                        <span class="list-value">2 matches</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="check is-on"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg></span>
+                        <span class="list-main"><span class="list-title">README.md</span></span>
+                        <span class="list-value">1 match</span>
+                      </div>
+                    </li>
+                  </ul>
+                  <div class="mock-bar">
+                    <span class="mock-caption">Untick a file to leave it alone.</span>
+                    <span class="btn btn-primary btn-sm">Replace in 3 files…</span>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <!-- The rest -->
+          <div class="languages">
+            <h3 class="title reveal">And the rest of a proper editor.</h3>
+            <p class="sub reveal">Every action is also in the command palette. On a Mac, read <kbd>Ctrl</kbd> as <kbd>⌘</kbd>.</p>
+          </div>
+          <ul class="grid">
+            <li class="card feature reveal">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#code"></use></svg></span>
+              <h3>Syntax highlighting</h3>
+              <p>23 languages, picked from the file name or shebang and switchable from the status bar. Colours meet WCAG&nbsp;AA contrast.</p>
+            </li>
+            <li class="card feature reveal d1">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#pencil"></use></svg></span>
+              <h3>Multiple cursors and columns</h3>
+              <p><kbd>Ctrl</kbd>+click, <kbd>Ctrl</kbd>&nbsp;<kbd>D</kbd> for the next occurrence, <kbd>Alt</kbd>+drag for a column. Duplicate, move and comment lines, fold code, wrap words.</p>
+            </li>
+            <li class="card feature reveal d2">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#bolt"></use></svg></span>
+              <h3>Command palette and quick open</h3>
+              <p><kbd>Ctrl</kbd>&nbsp;<kbd>Shift</kbd>&nbsp;<kbd>P</kbd> runs any action by name. <kbd>Ctrl</kbd>&nbsp;<kbd>P</kbd> jumps to a recent file.</p>
+            </li>
+            <li class="card feature reveal">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#sliders"></use></svg></span>
+              <h3>A status bar you can click</h3>
+              <p>Line and column, selection, indentation, language, encoding and line endings. Click any of them to change it.</p>
+            </li>
+            <li class="card feature reveal d1">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#lock"></use></svg></span>
+              <h3>Saves you can trust</h3>
+              <p>Atomic saves, so a crash never truncates a file. If another program changed it, you’re asked before anything is overwritten.</p>
+            </li>
+            <li class="card feature reveal d2">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#shield-check"></use></svg></span>
+              <h3>Updates that check themselves</h3>
+              <p>A small pill in the status bar when a new version is out. Every download is verified against a key built into the app, and your tabs come back after the restart.</p>
+            </li>
+            <li class="card feature reveal">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#folder"></use></svg></span>
+              <h3>Opens the way you do</h3>
+              <p>From the menu, by drag and drop, with “Open with…”, or as the default app for text, Markdown, data and source files.</p>
+            </li>
+            <li class="card feature reveal d1">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#gear"></use></svg></span>
+              <h3>Settings, in English or Norwegian</h3>
+              <p>System, light or dark theme, font size, tabs or spaces, default encoding and line ending, word wrap and whitespace. The interface speaks English and Norwegian Bokmål.</p>
+            </li>
+            <li class="card feature reveal d2">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#eye"></use></svg></span>
+              <h3>Accessible by default</h3>
+              <p>Keyboard navigation everywhere, visible focus, and respect for reduced motion, higher contrast and reduced transparency.</p>
+            </li>
+          </ul>
+
+          <div class="languages">
+            <h3 class="title reveal">23 languages, highlighted.</h3>
+            <p class="sub reveal">Each grammar loads only when a file needs it, so opening a file stays quick.</p>
+            <ul class="chips reveal" aria-label="Highlighted languages">
+              <li class="chip">Plain text</li>
+              <li class="chip">Markdown</li>
+              <li class="chip">JSON</li>
+              <li class="chip">YAML</li>
+              <li class="chip">TOML</li>
+              <li class="chip">XML</li>
+              <li class="chip">HTML</li>
+              <li class="chip">CSS</li>
+              <li class="chip">JavaScript</li>
+              <li class="chip">TypeScript</li>
+              <li class="chip">Python</li>
+              <li class="chip">Rust</li>
+              <li class="chip">Go</li>
+              <li class="chip">C</li>
+              <li class="chip">C++</li>
+              <li class="chip">C#</li>
+              <li class="chip">Java</li>
+              <li class="chip">SQL</li>
+              <li class="chip">Shell</li>
+              <li class="chip">PowerShell</li>
+              <li class="chip">INI</li>
+              <li class="chip">Log</li>
+              <li class="chip">Diff</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footprint ======================================================= -->
+      <section class="section footprint" id="footprint" aria-labelledby="footprint-title">
+        <div class="wrap">
+          <header class="section-head center reveal">
+            <h2 class="headline" id="footprint-title">Small enough to just install.</h2>
+            <p class="sub">
+              A Rust core and the system’s own web view instead of a bundled browser, so the download
+              stays small and the app feels at home on your desktop.
+            </p>
+          </header>
+          <ul class="stats">
+            <li class="stat reveal">
+              <span class="stat-label">Windows installer</span>
+              <span class="stat-value">~3<small>MB</small></span>
+              <span class="stat-meta">The .exe; the .msi is about 4&nbsp;MB</span>
+            </li>
+            <li class="stat reveal d1">
+              <span class="stat-label">macOS disk image</span>
+              <span class="stat-value">~8<small>MB</small></span>
+              <span class="stat-meta">Universal: Apple Silicon and Intel</span>
+            </li>
+            <li class="stat reveal d2">
+              <span class="stat-label">Highlighted languages</span>
+              <span class="stat-value">23</span>
+              <span class="stat-meta">Each loaded only when needed</span>
+            </li>
+            <li class="stat reveal d3">
+              <span class="stat-label">Trackers and accounts</span>
+              <span class="stat-value">0</span>
+              <span class="stat-meta">The only call home is the update check</span>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Compare ========================================================= -->
+      <section class="section section-alt" id="compare" aria-labelledby="compare-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <h2 class="headline" id="compare-title">Nimble Newt and Notepad++.</h2>
+            <p class="sub">
+              Notepad++ is a superb, mature editor with twenty years of features and a big plugin
+              community, and Nimble Newt borrows its spirit. Here’s an honest comparison.
+            </p>
+          </header>
+
+          <div class="table-wrap reveal">
+            <table class="compare">
+              <caption class="vh">Feature comparison between Nimble Newt and Notepad++</caption>
+              <thead>
+                <tr>
+                  <th scope="col"><span class="vh">Feature</span></th>
+                  <th scope="col">Nimble Newt</th>
+                  <th scope="col">Notepad++</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="group"><th colspan="3" scope="rowgroup">The basics</th></tr>
+                <tr><th scope="row">Platforms</th><td data-label="Nimble Newt">Windows 10/11 and macOS 11+, native installers</td><td data-label="Notepad++">Windows (elsewhere only through Wine)</td></tr>
+                <tr><th scope="row">Look and feel</th><td data-label="Nimble Newt">Modern, Apple-inspired; follows the system’s light or dark theme</td><td data-label="Notepad++">Classic Windows interface, with a dark mode</td></tr>
+                <tr><th scope="row">Built with</th><td data-label="Nimble Newt">Rust and Tauri, CodeMirror&nbsp;6</td><td data-label="Notepad++">C++ and Win32, Scintilla</td></tr>
+                <tr><th scope="row">License</th><td data-label="Nimble Newt">MIT</td><td data-label="Notepad++">GPL</td></tr>
+              </tbody>
+              <tbody>
+                <tr class="group"><th colspan="3" scope="rowgroup">Editing</th></tr>
+                <tr><th scope="row">Unsaved tabs survive a restart</th><td data-label="Nimble Newt"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td><td data-label="Notepad++"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td></tr>
+                <tr><th scope="row">Multiple cursors, column selection</th><td data-label="Nimble Newt"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td><td data-label="Notepad++"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td></tr>
+                <tr><th scope="row">Find in files with regex</th><td data-label="Nimble Newt"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes, with a Replace All preview and per-file opt-out</span></td><td data-label="Notepad++"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td></tr>
+                <tr><th scope="row">Command palette</th><td data-label="Nimble Newt"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td><td data-label="Notepad++"><span class="mark mark-no"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#x"></use></svg>Not built in</span></td></tr>
+                <tr><th scope="row">Syntax highlighting</th><td data-label="Nimble Newt">23 languages</td><td data-label="Notepad++"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Many more, plus your own language definitions</span></td></tr>
+                <tr><th scope="row">Encodings</th><td data-label="Nimble Newt">UTF-8 (± BOM), UTF-16 LE/BE, Windows-1252</td><td data-label="Notepad++"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Many more, including legacy code pages</span></td></tr>
+                <tr><th scope="row">Macros</th><td data-label="Nimble Newt"><span class="mark mark-no"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#x"></use></svg>No</span></td><td data-label="Notepad++"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td></tr>
+              </tbody>
+              <tbody>
+                <tr class="group"><th colspan="3" scope="rowgroup">Beyond editing</th></tr>
+                <tr><th scope="row">Plugins</th><td data-label="Nimble Newt"><span class="mark mark-no"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#x"></use></svg>Not yet (extensions are on the roadmap)</span></td><td data-label="Notepad++"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Hundreds, through Plugins Admin</span></td></tr>
+                <tr><th scope="row">Compare two files</th><td data-label="Nimble Newt"><span class="mark mark-no"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#x"></use></svg>Not yet (on the roadmap)</span></td><td data-label="Notepad++"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>With the Compare plugin</span></td></tr>
+                <tr><th scope="row">Very large files</th><td data-label="Nimble Newt">Up to 256&nbsp;MB today; streaming for bigger files is planned</td><td data-label="Notepad++"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Handles much larger files</span></td></tr>
+                <tr><th scope="row">Automatic updates</th><td data-label="Nimble Newt"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes, signature-verified</span></td><td data-label="Notepad++"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td></tr>
+                <tr><th scope="row">Interface languages</th><td data-label="Nimble Newt">English, Norwegian Bokmål</td><td data-label="Notepad++"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Dozens</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout status-info compare-note reveal">
+            <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#info"></use></svg>
+            <p>
+              <span class="callout-title">When Notepad++ is the better fit</span>
+              If you rely on plugins or macros, open files of several hundred megabytes, or need an
+              encoding or language beyond the ones above, Notepad++ is the better choice today. If you
+              want the same quick editing on a Mac, or a calmer, modern interface on Windows, give Nimble
+              Newt a try. Nimble Newt is not affiliated with Notepad++.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Download ======================================================== -->
+      <section class="section" id="download" aria-labelledby="download-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <h2 class="headline" id="download-title">Download Nimble Newt.</h2>
+            <p class="sub">
+              Free, for Windows and macOS.
+              <span id="release-info">The latest version is always on the GitHub releases page.</span>
+            </p>
+          </header>
+
+          <div class="callout status-info device-note" id="device-note" hidden>
+            <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#info"></use></svg>
+            <p>
+              <span class="callout-title">Nimble Newt is a desktop app</span>
+              It runs on Windows and macOS computers, not on phones or tablets. Open this page on your
+              computer to download it.
+            </p>
+          </div>
+
+          <ul class="platforms">
+            <li class="card platform reveal" id="platform-windows" data-os="windows">
+              <div class="platform-head">
+                <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#download"></use></svg></span>
+                <h3>Windows</h3>
+                <span class="pill status-accent" data-recommended hidden><span class="dot"></span>For this computer</span>
+              </div>
+              <p class="platform-req">
+                Windows 10 or 11, 64-bit (x64). Uses Microsoft Edge WebView2, which comes with
+                Windows&nbsp;11; on Windows&nbsp;10 the installer fetches it if it’s missing.
+              </p>
+              <div class="platform-actions">
+                <a class="btn btn-primary btn-lg" data-asset="exe" href="https://github.com/Ferdinand99/Nimble-Newt/releases/latest">
+                  <span>Download .exe</span>
+                  <span class="btn-meta" data-size></span>
+                </a>
+                <a class="btn btn-ghost btn-lg" data-asset="msi" href="https://github.com/Ferdinand99/Nimble-Newt/releases/latest">
+                  <span>Download .msi</span>
+                  <span class="btn-meta" data-size></span>
+                </a>
+              </div>
+              <p class="platform-files" data-files="windows">The .exe installer suits most people; the .msi is for managed deployments.</p>
+              <div class="callout status-warning">
+                <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#alert"></use></svg>
+                <p>
+                  <span class="callout-title">Windows will warn you the first time</span>
+                  The Windows build isn’t code-signed yet, so SmartScreen shows “Windows protected your
+                  PC”. Click <strong>More info</strong>, then <strong>Run anyway</strong>. Updates are
+                  still verified with the app’s own signing key.
+                </p>
+              </div>
+            </li>
+            <li class="card platform reveal d1" id="platform-mac" data-os="mac">
+              <div class="platform-head">
+                <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#download"></use></svg></span>
+                <h3>macOS</h3>
+                <span class="pill status-accent" data-recommended hidden><span class="dot"></span>For this Mac</span>
+              </div>
+              <p class="platform-req">
+                macOS 11 Big Sur or later. One universal app for both Apple Silicon and Intel Macs.
+              </p>
+              <div class="platform-actions">
+                <a class="btn btn-primary btn-lg" data-asset="dmg" href="https://github.com/Ferdinand99/Nimble-Newt/releases/latest">
+                  <span>Download .dmg</span>
+                  <span class="btn-meta" data-size></span>
+                </a>
+              </div>
+              <p class="platform-files" data-files="mac">Open the disk image and drag Nimble Newt to Applications.</p>
+              <div class="callout status-up">
+                <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check-circle"></use></svg>
+                <p>
+                  <span class="callout-title">Signed and notarized</span>
+                  The Mac app is signed with an Apple Developer ID and notarized by Apple, so macOS opens it
+                  without the unidentified-developer warning.
+                </p>
+              </div>
+            </li>
+          </ul>
+
+          <div class="download-meta reveal">
+            <p>
+              Already installed? Nimble Newt updates itself. It checks GitHub at start and every six
+              hours, and you can turn that off in Settings.
+            </p>
+            <div class="download-links">
+              <a class="link-arrow" id="release-notes" href="https://github.com/Ferdinand99/Nimble-Newt/releases/latest"
+                >Release notes <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"></use></svg
+              ></a>
+              <a class="link-arrow" href="https://github.com/Ferdinand99/Nimble-Newt#build-from-source"
+                >Build from source <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"></use></svg
+              ></a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FAQ ============================================================= -->
+      <section class="section" id="faq" aria-labelledby="faq-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <h2 class="headline" id="faq-title">Questions.</h2>
+          </header>
+          <ul class="faq reveal">
+            <li>
+              <details>
+                <summary>Is it really free?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    Yes. Nimble Newt is open source under the MIT license, with no account, ads or paid
+                    tier. The code is on <a href="https://github.com/Ferdinand99/Nimble-Newt">GitHub</a>.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>Why does Windows say “Windows protected your PC”?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    The Windows installer isn’t signed with a code-signing certificate yet, and SmartScreen
+                    warns about unsigned apps it hasn’t seen often. Click <strong>More info</strong>, then
+                    <strong>Run anyway</strong>. The Mac build is signed and notarized.
+                  </p>
+                  <p>
+                    Updates are a separate matter: every update is checked against a public key built into
+                    the app, and one with a wrong or missing signature is never installed.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>Does it collect any data?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    No. There’s no telemetry or analytics. The only network request is the update check,
+                    which downloads a small file from GitHub at start and every six hours. You can turn it
+                    off in Settings → Updates and use <strong>Check for Updates…</strong> by hand.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>Where are my unsaved tabs kept?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    In the app’s own data folder on your computer, never next to your files. If you’d
+                    rather be asked about unsaved changes when you quit, switch off
+                    <strong>Restore session</strong> in Settings.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>Can it open very large files?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    Files up to 256&nbsp;MB open in the editor. Bigger ones are refused with a clear
+                    message for now; viewing files of 500&nbsp;MB and more, streamed in chunks, is on the
+                    <a href="https://github.com/Ferdinand99/Nimble-Newt#roadmap">roadmap</a>.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>Is there a Linux version?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    Not as a download. Releases are made for Windows and macOS, but the app builds and runs
+                    on Linux from source (the screenshot on this page comes from a Linux build). See
+                    <a href="https://github.com/Ferdinand99/Nimble-Newt#build-from-source">Build from source</a>.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>What’s coming next?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    On the <a href="https://github.com/Ferdinand99/Nimble-Newt#roadmap">roadmap</a>:
+                    large-file viewing, comparing two files, formatting JSON, XML and SQL, a tools panel
+                    (Base64, URL encoding, hashes), and extensions.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>Can I translate it into my language?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    Please do. The interface text lives in one JSON file per language; copy the English
+                    one and translate the values. The
+                    <a href="https://github.com/Ferdinand99/Nimble-Newt#translating">translation guide</a>
+                    has the details.
+                  </p>
+                </div>
+              </details>
+            </li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <div class="footer-top">
+          <a class="brand" href="#top">
+            <img src="favicon.svg" alt="" width="24" height="24" loading="lazy" />
+            <span>Nimble Newt</span>
+          </a>
+          <span>Made in Norway</span>
+        </div>
+        <nav aria-label="Project links">
+          <ul class="footer-links">
+            <li><a href="https://github.com/Ferdinand99/Nimble-Newt">GitHub</a></li>
+            <li><a href="https://github.com/Ferdinand99/Nimble-Newt/releases">Releases</a></li>
+            <li><a href="https://github.com/Ferdinand99/Nimble-Newt/blob/main/CHANGELOG.md">Changelog</a></li>
+            <li><a href="https://github.com/Ferdinand99/Nimble-Newt#readme">Documentation</a></li>
+            <li><a href="https://github.com/Ferdinand99/Nimble-Newt/issues">Issues</a></li>
+            <li><a href="https://github.com/Ferdinand99/Nimble-Newt/blob/main/LICENSE">MIT license</a></li>
+          </ul>
+        </nav>
+        <p class="sibling">
+          From the maker of <a href="https://ferdinand99.github.io/Vigilant-Vole/">Vigilant Vole</a>, a
+          lightweight, self-hosted uptime monitor.
+        </p>
+        <p>
+          Nimble Newt is open source under the MIT license and not affiliated with Notepad++. This site
+          uses no cookies or analytics; its only outside request asks the GitHub API for the latest
+          release.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
