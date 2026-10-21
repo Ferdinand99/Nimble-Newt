@@ -11,6 +11,7 @@ Nimble Newt shares its look with [Vigilant Vole](https://github.com/Ferdinand99/
 | `public/icons.svg` | Icon sprite: the Vigilant Vole line icons we use (24 px grid, 1.5 px stroke, round caps, `currentColor`) plus a few editor icons (file, folder, replace, case, word, regex, …). |
 | `public/fonts/` | Inter variable font and its licence (SIL OFL). Everything is bundled; there are no CDNs. |
 | `assets/app-icon.svg` | App icon source; `npx tauri icon assets/app-icon.svg` regenerates the platform icons. |
+| `assets/brand/` | Logo with wordmark (light/dark, SVG + PNG), the bare newt mark, and a full-bleed Windows variant of the icon (`npx tauri icon assets/brand/nimble-newt-icon-windows.png -o <dir>`, then copy `icon.ico` and the `Square*`/`StoreLogo` files). |
 
 ## Principles
 
