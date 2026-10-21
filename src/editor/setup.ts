@@ -18,6 +18,7 @@ export interface ViewOptions {
   wrap: boolean;
   whitespace: boolean;
   completion: boolean;
+  minimap: boolean;
   indent: { useTabs: boolean; size: number };
 }
 
@@ -26,7 +27,14 @@ export const compartments = {
   wrap: new Compartment(),
   whitespace: new Compartment(),
   indent: new Compartment(),
+  minimap: new Compartment(),
 };
+
+/** Set once the minimap module has loaded; until then the minimap slot stays empty. */
+let minimapExtension: Extension | null = null;
+export function setMinimapExtension(e: Extension): void {
+  minimapExtension = e;
+}
 
 let updateHandler: (u: import("@codemirror/view").ViewUpdate) => void = () => {};
 export function onEditorUpdate(fn: typeof updateHandler): void {
@@ -104,6 +112,7 @@ export function dynamicExtensions(o: ViewOptions, lang: Extension = []): Extensi
     compartments.whitespace.of(o.whitespace ? whitespace : []),
     compartments.indent.of(indentExtension(o.indent)),
     wordCompletionCompartment.of(o.completion ? wordCompletion() : []),
+    compartments.minimap.of(o.minimap && minimapExtension ? minimapExtension : []),
   ];
 }
 
@@ -124,6 +133,7 @@ export function reconfigureEffects(o: ViewOptions) {
     compartments.whitespace.reconfigure(o.whitespace ? whitespace : []),
     compartments.indent.reconfigure(indentExtension(o.indent)),
     wordCompletionCompartment.reconfigure(o.completion ? wordCompletion() : []),
+    compartments.minimap.reconfigure(o.minimap && minimapExtension ? minimapExtension : []),
   ];
 }
 

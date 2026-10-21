@@ -104,6 +104,7 @@ async function boot(): Promise<void> {
 
   onUpdateAvailable((v) => status.setUpdate(v, () => void showAvailable()));
   startAutoUpdates();
+  if (settings.value.minimap) void workspace.ensureMinimap();
   void loadFolderState().then(() => restoreFolderPanel());
   // A hand-edited or outdated default encoding must not break saving later.
   void listEncodings().then((list) => {

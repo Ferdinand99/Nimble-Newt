@@ -512,5 +512,8 @@
  "folder.showHidden": "Show hidden files",
  "folder.none": "Open a folder to browse its files here.",
  "folder.noMatches": "No files match.",
- "folder.tooMany": "Too many entries; use the filter."
+ "folder.tooMany": "Too many entries; use the filter.",
+ "cmd.view.minimap": "Toggle Document Map",
+ "settings.minimap": "Document map",
+ "settings.minimapHint": "A small overview of the file next to the scrollbar"
 }

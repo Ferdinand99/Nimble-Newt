@@ -3,7 +3,7 @@ import { EditorView, type ViewUpdate } from "@codemirror/view";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { bookmarkedLines, setBookmarkEffect } from "../editor/bookmarks";
-import { compartments, languageExtension, makeState, onEditorUpdate, reconfigureEffects, type ViewOptions } from "../editor/setup";
+import { compartments, languageExtension, makeState, onEditorUpdate, reconfigureEffects, setMinimapExtension, type ViewOptions } from "../editor/setup";
 import { api, errorMessage, type Encoding, type Eol, type LargeOpened, type OpenedFile, type RestoredTab } from "../lib/api";
 import { debounce, h } from "../lib/dom";
 import { t } from "../lib/i18n";
@@ -98,6 +98,7 @@ export class Workspace {
       wrap: s.wordWrap,
       whitespace: s.showWhitespace,
       completion: s.wordCompletion,
+      minimap: s.minimap,
       indent: indent ?? { useTabs: !s.insertSpaces, size: s.tabSize },
     };
   }
@@ -107,12 +108,25 @@ export class Workspace {
     onEditorUpdate((u) => this.onUpdate(u));
     this.view.scrollDOM.addEventListener("scroll", () => this.persist(), { passive: true });
     settings.onChange((_s, changed) => {
-      if (changed.some((k) => k === "wordWrap" || k === "showWhitespace" || k === "wordCompletion" || k === "tabSize" || k === "insertSpaces")) {
+      if (changed.includes("minimap") && settings.value.minimap) {
+        void this.ensureMinimap();
+        return;
+      }
+      if (changed.some((k) => k === "wordWrap" || k === "showWhitespace" || k === "wordCompletion" || k === "minimap" || k === "tabSize" || k === "insertSpaces")) {
         this.optionsVersion++;
         this.applyOptions(this.active);
         this.emit("settings");
       }
     });
+  }
+
+  /** Loads the minimap code on first use and switches it on for the open tabs. */
+  async ensureMinimap(): Promise<void> {
+    const m = await import("../editor/minimap");
+    setMinimapExtension(m.minimap());
+    this.optionsVersion++;
+    this.applyOptions(this.active);
+    this.emit("settings");
   }
 
   // ---- state helpers ------------------------------------------------------

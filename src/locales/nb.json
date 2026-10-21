@@ -512,5 +512,8 @@
  "folder.showHidden": "Vis skjulte filer",
  "folder.none": "Åpne en mappe for å bla gjennom filene her.",
  "folder.noMatches": "Ingen filer passer.",
- "folder.tooMany": "For mange oppføringer; bruk filteret."
+ "folder.tooMany": "For mange oppføringer; bruk filteret.",
+ "cmd.view.minimap": "Av/på dokumentkart",
+ "settings.minimap": "Dokumentkart",
+ "settings.minimapHint": "En liten oversikt over fila ved siden av rullefeltet"
 }

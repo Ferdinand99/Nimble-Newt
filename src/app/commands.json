@@ -507,6 +507,9 @@
   },
   {
    "id": "file.openFolder"
+  },
+  {
+   "id": "view.minimap"
   }
  ],
  "menu": [
@@ -658,6 +661,7 @@
     "-",
     "view.wrap",
     "view.whitespace",
+    "view.minimap",
     "view.completion",
     "doc.follow",
     "-",

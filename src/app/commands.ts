@@ -168,6 +168,7 @@ const handlers: Record<string, () => void | Promise<void>> = {
   ...lineOpHandlers,
   "view.palette": () => openPalette(),
   "view.wrap": () => settings.set({ wordWrap: !settings.value.wordWrap }),
+  "view.minimap": () => settings.set({ minimap: !settings.value.minimap }),
   "view.completion": () => settings.set({ wordCompletion: !settings.value.wordCompletion }),
   "view.whitespace": () => settings.set({ showWhitespace: !settings.value.showWhitespace }),
   "view.zoomIn": () => zoom(1),

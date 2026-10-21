@@ -11,6 +11,7 @@ export interface Settings {
   wordWrap: boolean;
   showWhitespace: boolean;
   wordCompletion: boolean;
+  minimap: boolean;
   defaultEncoding: Encoding;
   defaultEol: Eol;
   restoreSession: boolean;
@@ -26,6 +27,7 @@ export const DEFAULTS: Settings = {
   wordWrap: false,
   showWhitespace: false,
   wordCompletion: true,
+  minimap: false,
   defaultEncoding: "UTF-8",
   defaultEol: /Windows/.test(navigator.userAgent) ? "CRLF" : "LF",
   restoreSession: true,
@@ -50,6 +52,7 @@ export function normalize(raw: unknown): Settings {
     wordWrap: bool(r.wordWrap, DEFAULTS.wordWrap),
     showWhitespace: bool(r.showWhitespace, DEFAULTS.showWhitespace),
     wordCompletion: bool(r.wordCompletion, DEFAULTS.wordCompletion),
+    minimap: bool(r.minimap, DEFAULTS.minimap),
     defaultEncoding: typeof r.defaultEncoding === "string" && /^[A-Za-z0-9_. :-]{2,32}$/.test(r.defaultEncoding) ? r.defaultEncoding : DEFAULTS.defaultEncoding,
     defaultEol: pick(r.defaultEol, ["LF", "CRLF", "CR"], DEFAULTS.defaultEol),
     restoreSession: bool(r.restoreSession, DEFAULTS.restoreSession),

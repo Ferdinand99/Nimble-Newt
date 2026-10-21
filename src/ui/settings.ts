@@ -70,6 +70,7 @@ export async function openSettings(): Promise<void> {
       row(t("settings.tabSize"), stepper("tabSize", 1, 16, t("settings.tabSize"))),
       row(t("settings.wordWrap"), toggle("wordWrap", t("settings.wordWrap"))),
       row(t("settings.showWhitespace"), toggle("showWhitespace", t("settings.showWhitespace"))),
+      row(t("settings.minimap"), toggle("minimap", t("settings.minimap")), t("settings.minimapHint")),
       row(t("settings.wordCompletion"), toggle("wordCompletion", t("settings.wordCompletion")), t("settings.wordCompletionHint")),
     ),
     h("div", { class: "group-title" }, t("settings.files")),
