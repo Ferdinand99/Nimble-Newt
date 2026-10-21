@@ -1,11 +1,17 @@
 //! Platform-independent logic for Nimble Newt: everything that can be tested without a webview.
 
+pub mod diff;
 pub mod encoding;
 pub mod eol;
+pub mod extensions;
 pub mod fileio;
+pub mod folder;
+pub mod hash;
+pub mod largefile;
 pub mod search;
 pub mod session;
 pub mod update;
+pub mod userlang;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -15,6 +21,9 @@ pub enum Error {
     Msg(String),
     #[error("{0} was changed by another program since it was opened")]
     Conflict(String),
+    /// Saving would lose characters the target encoding (the label) cannot represent.
+    #[error("some characters cannot be represented in {0}")]
+    Lossy(String),
     #[error("invalid pattern: {0}")]
     Pattern(String),
     #[error("serialization error: {0}")]

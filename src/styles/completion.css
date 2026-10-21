@@ -1,0 +1,48 @@
+/* Word completion tooltip (CodeMirror autocomplete). Tokens only; matches the menu/palette look. */
+:root .cm-tooltip.cm-tooltip-autocomplete {
+  min-width: 160px;
+  padding: var(--sp-1);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--material);
+  -webkit-backdrop-filter: var(--blur-material);
+  backdrop-filter: var(--blur-material);
+  box-shadow:
+    var(--shadow-pop),
+    0 0 0 1px var(--line);
+  color: var(--text);
+}
+:root .cm-tooltip.cm-tooltip-autocomplete > ul {
+  max-height: 14em;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+}
+:root .cm-tooltip.cm-tooltip-autocomplete > ul > li {
+  padding: 3px var(--sp-2);
+  border-radius: var(--r-xs);
+  color: var(--text);
+  line-height: 1.5;
+}
+:root .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--brand);
+  color: #fff;
+}
+:root .cm-tooltip.cm-tooltip-autocomplete .cm-completionMatchedText {
+  font-weight: 700;
+  text-decoration: none;
+}
+:root .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionMatchedText {
+  color: inherit;
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root .cm-tooltip.cm-tooltip-autocomplete {
+    background: var(--card-raised);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@media (forced-colors: active) {
+  :root .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+    outline: 2px solid Highlight;
+  }
+}

@@ -24,6 +24,9 @@ pub struct TabMeta {
     pub scroll_top: f64,
     pub scroll_left: f64,
     pub saved_mtime_ms: Option<i64>,
+    /// 1-based numbers of bookmarked lines. Added after the first release: older sessions lack it.
+    #[serde(default)]
+    pub bookmarks: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -270,6 +273,34 @@ mod tests {
             Some("{\"fontSize\":14}")
         );
         assert!(s.write_doc("settings", "nope").is_err());
+    }
+
+    #[test]
+    fn sessions_from_the_first_release_still_load() {
+        // Exactly what version 0.1.0 wrote: no `bookmarks` field.
+        let old = r#"{"tabs":[{"id":"a","path":"/p","title":"p","encoding":"UTF-8","eol":"LF","language":null,"dirty":false,
+            "selectionAnchor":3,"selectionHead":4,"scrollTop":1.5,"scrollLeft":0.0,"savedMtimeMs":99}],"active":"a"}"#;
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("session.json"), old).unwrap();
+        let s = SessionStore::new(dir.path()).unwrap();
+        let r = s.load();
+        assert_eq!(r.tabs.len(), 1);
+        assert_eq!(r.tabs[0].meta.selection_head, 4);
+        assert!(r.tabs[0].meta.bookmarks.is_empty());
+    }
+
+    #[test]
+    fn bookmarks_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = SessionStore::new(dir.path()).unwrap();
+        let mut t = tab("a", Some("/p"), false);
+        t.bookmarks = vec![2, 40];
+        s.write_meta(&SessionMeta {
+            tabs: vec![t],
+            active: Some("a".into()),
+        })
+        .unwrap();
+        assert_eq!(s.load().tabs[0].meta.bookmarks, vec![2, 40]);
     }
 
     #[test]

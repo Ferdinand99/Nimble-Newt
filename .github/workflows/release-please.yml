@@ -27,6 +27,7 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       release_id: ${{ steps.draft.outputs.release_id }}
+      pr_branch: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -47,6 +48,31 @@ jobs:
             exit 1
           fi
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
+
+  # release-please cannot update Cargo.lock, so its versions would lag behind Cargo.toml.
+  # Refresh the lockfile on the release PR branch (workspace members only, no dependency bumps).
+  lockfile:
+    name: Refresh Cargo.lock on the release PR
+    needs: release-please
+    if: needs.release-please.outputs.pr_branch != '' && needs.release-please.outputs.release_created != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.pr_branch }}
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo update --workspace
+      - name: Commit if the lockfile changed
+        run: |
+          if git diff --quiet -- Cargo.lock; then
+            echo "Cargo.lock is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git commit -m "chore: refresh Cargo.lock for the release"
+          git push
 
   preflight:
     name: Preflight (updater keys)
@@ -203,7 +229,8 @@ jobs:
         run: |
           assets=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID" --jq '.assets[].name')
           echo "$assets"
-          if ! grep -qx 'latest.json' <<< "$assets"; then
+          # latest.json.new is the leftover of an interrupted "Put the changelog into latest.json" run; that step finishes it.
+          if ! grep -qxE 'latest\.json(\.new)?' <<< "$assets"; then
             echo "::error::Release $TAG has no latest.json asset; leaving it as a draft."
             exit 1
           fi
@@ -211,6 +238,52 @@ jobs:
             echo "::error::Release $TAG has no .sig asset (updater signatures); leaving it as a draft."
             exit 1
           fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # tauri-action leaves `notes` empty when it uploads to an existing release; fill it from the
+      # release body (the release-please changelog) so the in-app update dialog shows what is new.
+      - name: Put the changelog into latest.json
+        run: |
+          # Safe to run again after a failure: the new file is uploaded as latest.json.new first, so
+          # latest.json is never missing without a finished replacement next to it, and a run that finds
+          # the notes already in place does nothing.
+          set -euo pipefail
+          api="repos/${{ github.repository }}"
+          asset_id() { gh api "$api/releases/$RELEASE_ID" --jq ".assets[] | select(.name == \"$1\") | .id"; }
+          gh api "$api/releases/$RELEASE_ID" --jq '.body // ""' > release-body.md
+
+          # Finish an interrupted earlier run first.
+          leftover=$(asset_id latest.json.new)
+          if [ -n "$leftover" ]; then
+            old=$(asset_id latest.json)
+            [ -z "$old" ] || gh api -X DELETE "$api/releases/assets/$old"
+            gh api -X PATCH "$api/releases/assets/$leftover" -f name=latest.json > /dev/null
+            echo "Finished an interrupted update of latest.json."
+          fi
+
+          id=$(asset_id latest.json)
+          if [ -z "$id" ]; then
+            echo "::error::Release $TAG has no latest.json asset."
+            exit 1
+          fi
+          gh api "$api/releases/assets/$id" -H "Accept: application/octet-stream" > latest.json
+          node scripts/update-notes.mjs latest.json release-body.md latest.new.json
+          node -e 'const j=require("./latest.new.json"); if(!j.notes){console.error("::error::latest.json would still have empty notes"); process.exit(1)}'
+          if node -e 'process.exit(require("./latest.json").notes === require("./latest.new.json").notes ? 0 : 1)'; then
+            echo "latest.json already carries the changelog."
+            exit 0
+          fi
+          new_id=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/json" \
+            --data-binary @latest.new.json \
+            "https://uploads.github.com/$api/releases/$RELEASE_ID/assets?name=latest.json.new" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).id))')
+          gh api -X DELETE "$api/releases/assets/$id"
+          gh api -X PATCH "$api/releases/assets/$new_id" -f name=latest.json > /dev/null
+          echo "latest.json now carries the changelog."
       - name: Publish release
         run: |
           gh api -X PATCH "repos/${{ github.repository }}/releases/$RELEASE_ID" \

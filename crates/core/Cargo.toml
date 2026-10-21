@@ -15,6 +15,13 @@ regex = "1"
 globset = "0.4"
 thiserror = "2"
 semver = "1"
+similar = "2"
+md-5 = "0.10"
+sha1 = "0.10"
+sha2 = "0.10"
+toml = "0.8"
+memchr = "2"
+zip = { version = "4.6", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tempfile = "3"

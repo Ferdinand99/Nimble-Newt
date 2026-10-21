@@ -2,15 +2,19 @@ import { EditorSelection, EditorState, Text, type Extension, type TransactionSpe
 import { EditorView, type ViewUpdate } from "@codemirror/view";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { compartments, languageExtension, makeState, onEditorUpdate, reconfigureEffects, type ViewOptions } from "../editor/setup";
-import { api, errorMessage, type Encoding, type Eol, type OpenedFile, type RestoredTab } from "../lib/api";
+import { bookmarkedLines, setBookmarkEffect } from "../editor/bookmarks";
+import { compartments, languageExtension, makeState, onEditorUpdate, reconfigureEffects, setCompletionExtension, setMinimapExtension, type ViewOptions } from "../editor/setup";
+import { api, errorMessage, type Encoding, type Eol, type LargeOpened, type OpenedFile, type RestoredTab } from "../lib/api";
 import { debounce, h } from "../lib/dom";
 import { t } from "../lib/i18n";
+import { guessLanguage } from "../lib/guess";
 import { detectFromShebang, detectLanguage, getLanguage, type LanguageDef } from "../lib/languages";
 import { basename, detectIndent, nextUntitledName, pushRecent, type Indent } from "../lib/logic";
 import { expectedMtime, isConflict } from "../lib/saveConflict";
+import { isLossy, lossyPlan, type LossyChoice } from "../lib/saveLossy";
 import { settings } from "../lib/settings";
 import { confirmSheet, openSheet } from "../ui/dialog";
+import type { LargeViewer } from "../ui/largeView";
 import { toast } from "../ui/toast";
 
 export interface Doc {
@@ -37,6 +41,12 @@ export interface Doc {
   optionsVersion: number;
   /** The document last written to the session store as an unsaved buffer. */
   written: Text | null;
+  /** Bookmarked lines, kept here while the tab's editor state is not loaded. */
+  bookmarks: number[];
+  /** Reload automatically when the file grows or changes on disk, and stay at the end (like `tail -f`). */
+  follow: boolean;
+  /** Set for files opened in the read-only large-file viewer instead of the editor. */
+  large: { opened: LargeOpened; viewer: LargeViewer | null } | null;
 }
 
 export type ChangeKind = "tabs" | "active" | "doc" | "selection" | "settings";
@@ -59,14 +69,21 @@ export class Workspace {
   docs: Doc[] = [];
   activeId: string | null = null;
   view!: EditorView;
+  /** The second editor of a split view, when there is one. */
+  secondary: EditorView | null = null;
+  private mirrorHook: ((u: ViewUpdate) => void) | null = null;
   recent: string[] = [];
   private closed: { path: string }[] = [];
   private listeners = new Set<Listener>();
   private optionsVersion = 1;
   private checking = false;
+  private followTimer: number | undefined;
+  private following = false;
   private lastSelectionPersist = 0;
 
   readonly persist = debounce(() => void this.persistNow(), 500);
+  /** Re-guesses the language of an untitled tab shortly after typing or pasting stops. */
+  private readonly guess = debounce(() => void this.autoDetect(), 400);
 
   on(fn: Listener): void {
     this.listeners.add(fn);
@@ -84,6 +101,8 @@ export class Workspace {
     return {
       wrap: s.wordWrap,
       whitespace: s.showWhitespace,
+      completion: s.wordCompletion,
+      minimap: s.minimap,
       indent: indent ?? { useTabs: !s.insertSpaces, size: s.tabSize },
     };
   }
@@ -93,7 +112,15 @@ export class Workspace {
     onEditorUpdate((u) => this.onUpdate(u));
     this.view.scrollDOM.addEventListener("scroll", () => this.persist(), { passive: true });
     settings.onChange((_s, changed) => {
-      if (changed.some((k) => k === "wordWrap" || k === "showWhitespace" || k === "tabSize" || k === "insertSpaces")) {
+      if (changed.includes("minimap") && settings.value.minimap) {
+        void this.ensureMinimap();
+        return;
+      }
+      if (changed.includes("wordCompletion") && settings.value.wordCompletion) {
+        void this.ensureCompletion();
+        return;
+      }
+      if (changed.some((k) => k === "wordWrap" || k === "showWhitespace" || k === "wordCompletion" || k === "minimap" || k === "tabSize" || k === "insertSpaces")) {
         this.optionsVersion++;
         this.applyOptions(this.active);
         this.emit("settings");
@@ -101,10 +128,28 @@ export class Workspace {
     });
   }
 
+  /** Loads the minimap code on first use and switches it on for the open tabs. */
+  async ensureMinimap(): Promise<void> {
+    const m = await import("../editor/minimap");
+    setMinimapExtension(m.minimap());
+    this.optionsVersion++;
+    this.applyOptions(this.active);
+    this.emit("settings");
+  }
+
+  /** Loads word completion (a sizeable part of CodeMirror) after the first paint instead of at start-up. */
+  async ensureCompletion(): Promise<void> {
+    const m = await import("../editor/wordCompletion");
+    setCompletionExtension(m.wordCompletion());
+    this.optionsVersion++;
+    this.applyOptions(this.active);
+  }
+
   // ---- state helpers ------------------------------------------------------
 
   /** Current editor state of a doc (the live one for the active tab). */
   stateOf(doc: Doc): EditorState | null {
+    if (doc.large) return null;
     return doc.id === this.activeId ? this.view.state : doc.state;
   }
 
@@ -113,6 +158,7 @@ export class Workspace {
   }
 
   isDirty(doc: Doc): boolean {
+    if (doc.large) return false;
     if (doc.forceDirty) return true;
     const st = this.stateOf(doc);
     if (!st) return false;
@@ -131,13 +177,31 @@ export class Workspace {
     doc.optionsVersion = this.optionsVersion;
   }
 
+  attachSecondary(view: EditorView, mirror: (u: ViewUpdate) => void): void {
+    this.secondary = view;
+    this.mirrorHook = mirror;
+  }
+  detachSecondary(): void {
+    this.secondary = null;
+    this.mirrorHook = null;
+  }
+  /** The editor that has keyboard focus: the split pane when it is focused, otherwise the main editor. */
+  focusedView(): EditorView {
+    return this.secondary?.hasFocus ? this.secondary : this.view;
+  }
+
   private onUpdate(u: ViewUpdate): void {
+    // Secondary editors (comparison panes) share the extension set but are not the active tab.
+    if (u.view === this.secondary && u.selectionSet) this.emit("selection");
+    if (u.view !== this.view) return;
+    if (u.docChanged) this.mirrorHook?.(u);
     const doc = this.active;
     if (!doc) return;
     if (u.docChanged) {
       doc.missing = false;
       this.emit("doc");
       this.persist();
+      if (!doc.path && !doc.langManual) this.guess();
     } else if (u.selectionSet) {
       this.emit("selection");
       if (Date.now() - this.lastSelectionPersist > 1000) {
@@ -157,9 +221,11 @@ export class Workspace {
     if (!p.langId && def.id === "plaintext") {
       const nl = p.text.indexOf("\n");
       def = detectFromShebang(nl < 0 ? p.text : p.text.slice(0, nl)) ?? def;
+      // Tabs without a file name: guess from the content (never overrides a language chosen by hand).
+      if (!path && def.id === "plaintext") def = getLanguage(guessLanguage(p.text));
     }
     const state = makeState(p.text, this.viewOptions(indent), [], p.anchor !== undefined ? { anchor: p.anchor, head: p.head ?? p.anchor } : undefined);
-    return {
+    const doc: Doc = {
       id: p.id ?? newId(),
       path,
       title: p.title ?? (path ? basename(path) : nextUntitledName(this.docs.map((d) => d.title), t("tab.untitled"))),
@@ -179,7 +245,12 @@ export class Workspace {
       scrollLeft: p.scrollLeft ?? 0,
       optionsVersion: this.optionsVersion,
       written: null,
+      bookmarks: p.bookmarks ?? [],
+      follow: false,
+      large: null,
     };
+    if (doc.bookmarks.length) doc.state = state.update({ effects: setBookmarkEffect(doc.bookmarks) }).state;
+    return doc;
   }
 
   newDoc(text = ""): Doc {
@@ -190,7 +261,7 @@ export class Workspace {
     return doc;
   }
 
-  async openPaths(paths: string[], at?: { line: number; column: number }): Promise<void> {
+  async openPaths(paths: string[], at?: { line: number; column: number }, forceLarge = false): Promise<void> {
     let last: string | null = null;
     for (const path of paths) {
       const existing = this.docs.find((d) => d.path === path);
@@ -199,9 +270,18 @@ export class Workspace {
         continue;
       }
       try {
-        const f = await api.openFile(path, settings.value.defaultEol);
-        if (f.lossy) toast(t("toast.lossyOpen", { name: basename(path) }), "warning");
-        const doc = this.buildDoc({ text: f.text, path: f.path, encoding: f.encoding, eol: f.eol, savedMtime: f.mtimeMs });
+        const meta = await api.fileMeta(path);
+        let doc: Doc;
+        if (meta.large || forceLarge) {
+          doc = this.buildDoc({ text: "", path });
+          doc.state = null;
+          doc.savedDoc = null;
+          if (!(await this.openLarge(doc))) continue;
+        } else {
+          const f = await api.openFile(path, settings.value.defaultEol);
+          if (f.lossy) toast(t("toast.lossyOpen", { name: basename(path) }), "warning");
+          doc = this.buildDoc({ text: f.text, path: f.path, encoding: f.encoding, eol: f.eol, savedMtime: f.mtimeMs });
+        }
         // Replace a pristine "Untitled" tab instead of piling up empty tabs.
         const only = this.docs.length === 1 ? this.docs[0] : null;
         if (only && !only.path && !this.isDirty(only)) {
@@ -250,14 +330,14 @@ export class Workspace {
 
   private captureView(): void {
     const doc = this.active;
-    if (!doc) return;
+    if (!doc || doc.large) return;
     doc.state = this.view.state;
     this.captureLive();
   }
 
   private captureLive(): void {
     const d = this.active;
-    if (!d) return;
+    if (!d || d.large) return;
     const m = this.view.state.selection.main;
     d.anchor = m.anchor;
     d.head = m.head;
@@ -265,13 +345,16 @@ export class Workspace {
     d.scrollLeft = this.view.scrollDOM.scrollLeft;
   }
 
-  private async ensureLoaded(doc: Doc): Promise<boolean> {
-    if (doc.state) return true;
+  /** Makes sure a lazily restored tab has its editor state (reads the file when needed). */
+  async ensureLoaded(doc: Doc): Promise<boolean> {
+    if (doc.state || doc.large) return true;
     if (!doc.path) return false;
     try {
+      if ((await api.fileMeta(doc.path)).large) return await this.openLarge(doc);
       const f = await api.openFile(doc.path, settings.value.defaultEol);
       doc.indent = detectIndent(f.text) ?? doc.indent;
       doc.state = makeState(f.text, this.viewOptions(doc.indent), [], { anchor: doc.anchor, head: doc.head });
+      if (doc.bookmarks.length) doc.state = doc.state.update({ effects: setBookmarkEffect(doc.bookmarks) }).state;
       doc.savedDoc = doc.state.doc;
       doc.encoding = f.encoding;
       doc.eol = f.eol;
@@ -291,6 +374,15 @@ export class Workspace {
     if (id !== this.activeId) this.captureView();
     if (!(await this.ensureLoaded(next))) return;
     this.activeId = id;
+    if (next.large) {
+      this.showLarge(next);
+      this.emit("tabs");
+      this.emit("active");
+      this.updateWindowTitle();
+      this.persist();
+      return;
+    }
+    this.hideLarge();
     if (next.optionsVersion !== this.optionsVersion) {
       next.state = next.state!.update({ effects: reconfigureEffects(this.viewOptions(next.indent)) }).state;
       next.optionsVersion = this.optionsVersion;
@@ -307,6 +399,153 @@ export class Workspace {
     this.emit("active");
     this.updateWindowTitle();
     void this.ensureDocLanguage(next);
+    this.persist();
+  }
+
+  /** Re-detects the language of open files, e.g. after custom languages were registered. */
+  /** Turns "follow file" on or off for a tab. A followed file is reloaded when it changes and the view stays at its end. */
+  toggleFollow(doc: Doc): void {
+    if (!doc.path) {
+      toast(t("follow.needsFile"), "info");
+      return;
+    }
+    doc.follow = !doc.follow;
+    if (doc.large) {
+      doc.large.viewer?.setFollow(doc.follow);
+      this.emit("doc");
+      return;
+    }
+    if (doc.follow) {
+      if (this.isDirty(doc)) {
+        doc.follow = false;
+        toast(t("follow.unsaved"), "warning");
+        return;
+      }
+      this.scrollToEnd(doc);
+      this.followTimer ??= window.setInterval(() => void this.followTick(), 1000);
+    }
+    if (!this.docs.some((d) => d.follow) && this.followTimer !== undefined) {
+      clearInterval(this.followTimer);
+      this.followTimer = undefined;
+    }
+    this.emit("doc");
+  }
+
+  private scrollToEnd(doc: Doc): void {
+    if (doc.id !== this.activeId) return;
+    const end = this.view.state.doc.length;
+    this.view.dispatch({ selection: EditorSelection.cursor(end), effects: EditorView.scrollIntoView(end, { y: "end" }) });
+  }
+
+  private async followTick(): Promise<void> {
+    if (this.following) return;
+    this.following = true;
+    try {
+      const docs = this.docs.filter((d) => d.follow && d.path && d.state);
+      if (!docs.length) return;
+      const mtimes = await api.fileMtimes(docs.map((d) => d.path!));
+      for (let i = 0; i < docs.length; i++) {
+        const doc = docs[i];
+        const m = mtimes[i];
+        if (m === null || m === doc.savedMtime) continue;
+        if (this.isDirty(doc)) {
+          doc.follow = false;
+          toast(t("follow.stoppedUnsaved", { name: doc.title }), "warning");
+          this.emit("doc");
+          continue;
+        }
+        try {
+          this.replaceContents(doc, await api.openFile(doc.path!, settings.value.defaultEol));
+          this.scrollToEnd(doc);
+        } catch (e) {
+          doc.follow = false;
+          toast(`${doc.title}: ${errorMessage(e)}`, "error");
+          this.emit("doc");
+        }
+      }
+    } finally {
+      this.following = false;
+    }
+  }
+
+  async redetectLanguages(): Promise<void> {
+    for (const d of this.docs) {
+      if (!d.path || d.langManual) continue;
+      const id = detectLanguage(d.path).id;
+      if (id === d.langId) continue;
+      d.langId = id;
+      if (d.state || d.id === this.activeId) await this.ensureDocLanguage(d);
+    }
+    this.emit("doc");
+  }
+
+  private async autoDetect(): Promise<void> {
+    const d = this.active;
+    if (!d || d.path || d.langManual) return;
+    const id = guessLanguage(this.textOf(d));
+    if (id && id !== d.langId) await this.setLanguage(d, id, false);
+  }
+
+  // ---- large files -----------------------------------------------------------------
+
+  /** Opens `doc` in the large-file viewer (with `enc` instead of the detected encoding when given). A viewer the tab already has is replaced only once the new one opened. */
+  private async openLarge(doc: Doc, enc: Encoding | null = null): Promise<boolean> {
+    try {
+      await import("../ui/largeView"); // load the viewer code before it is needed synchronously
+      const opened = await api.lfOpen(doc.path!, enc);
+      this.disposeLarge(doc);
+      doc.large = { opened, viewer: null };
+      doc.encoding = opened.info.encoding;
+      doc.eol = opened.info.eol;
+      doc.langId = "plaintext";
+      doc.state = null;
+      return true;
+    } catch (e) {
+      toast(`${doc.title}: ${errorMessage(e)}`, "error");
+      return false;
+    }
+  }
+
+  /** The viewer of the active tab, when it is a large file. */
+  largeViewer(): LargeViewer | null {
+    return this.active?.large?.viewer ?? null;
+  }
+
+  private async showLarge(doc: Doc): Promise<void> {
+    const { LargeViewer } = await import("../ui/largeView");
+    this.hideLarge();
+    const l = doc.large!;
+    const host = document.getElementById("editor")!.parentElement!;
+    l.viewer ??= new LargeViewer(host, l.opened, { onChange: () => this.emit("selection") });
+    document.getElementById("editor")!.style.visibility = "hidden";
+    l.viewer.setVisible(true);
+    this.emit("selection");
+  }
+
+  private hideLarge(): void {
+    for (const d of this.docs) d.large?.viewer?.setVisible(false);
+    document.getElementById("editor")!.style.visibility = "";
+  }
+
+  private disposeLarge(doc: Doc): void {
+    if (!doc.large) return;
+    if (doc.large.viewer) doc.large.viewer.destroy();
+    else void api.lfClose(doc.large.opened.id).catch(() => {});
+    doc.large = null;
+  }
+
+  /** The language extension of a tab (loaded on demand), for editors other than the main one. */
+  languageExtensionFor(doc: Doc): Promise<Extension> {
+    return loadLanguage(getLanguage(doc.langId));
+  }
+
+  /** Replaces the whole content of a tab (one undoable change). No-op when the text is the same. */
+  applyText(doc: Doc, text: string): void {
+    const st = this.stateOf(doc);
+    if (!st || st.doc.toString() === text) return;
+    this.updateState(doc, { changes: { from: 0, to: st.doc.length, insert: text }, userEvent: "input.compare" });
+    this.emit("tabs");
+    this.updateWindowTitle();
     this.persist();
   }
 
@@ -360,15 +599,20 @@ export class Workspace {
 
   /**
    * Saves a tab. Unless `skipCheck` is set, the backend refuses to overwrite a file that changed on disk
-   * since it was opened; the user then chooses between overwriting and reloading.
+   * since it was opened; the user then chooses between overwriting and reloading. Text the encoding
+   * cannot hold is refused too, unless `allowLossy`; the user then picks UTF-8, saving anyway or cancel.
    */
-  async save(doc: Doc, skipCheck = false): Promise<boolean> {
+  async save(doc: Doc, skipCheck = false, allowLossy = false): Promise<boolean> {
+    if (doc.large) {
+      toast(t("large.readOnly"), "info");
+      return true;
+    }
     if (!doc.path) return this.saveAs(doc);
     const st = this.stateOf(doc);
     if (!st) return true;
     const snapshot = st.doc;
     try {
-      const r = await api.saveFile(doc.path, snapshot.toString(), doc.encoding, doc.eol, expectedMtime(doc, skipCheck));
+      const r = await api.saveFile(doc.path, snapshot.toString(), doc.encoding, doc.eol, expectedMtime(doc, skipCheck), allowLossy);
       doc.savedDoc = snapshot;
       doc.savedMtime = r.mtimeMs;
       doc.forceDirty = false;
@@ -380,6 +624,7 @@ export class Workspace {
       return true;
     } catch (e) {
       if (isConflict(e)) return this.resolveSaveConflict(doc);
+      if (isLossy(e)) return this.resolveLossySave(doc, skipCheck);
       toast(t("toast.saveFailed", { name: doc.title, error: errorMessage(e) }), "error");
       return false;
     }
@@ -406,6 +651,24 @@ export class Workspace {
       }
     }
     return false;
+  }
+
+  private async resolveLossySave(doc: Doc, skipCheck: boolean): Promise<boolean> {
+    const choice = await openSheet<LossyChoice>({
+      title: t("lossy.title", { encoding: doc.encoding }),
+      alert: true,
+      body: h("p", {}, t("lossy.message", { name: doc.title, encoding: doc.encoding })),
+      dismissValue: "cancel",
+      choices: [
+        { value: "cancel", label: t("common.cancel") },
+        { value: "anyway", label: t("lossy.anyway"), kind: "danger" },
+        { value: "utf8", label: t("lossy.utf8"), kind: "primary" },
+      ],
+    });
+    const plan = lossyPlan(choice);
+    if (!plan) return false;
+    if (plan.encoding) this.setEncoding(doc, plan.encoding);
+    return this.save(doc, skipCheck, plan.allowLossy);
   }
 
   async saveAs(doc: Doc): Promise<boolean> {
@@ -466,6 +729,7 @@ export class Workspace {
       this.closed.push({ path: doc.path });
       if (this.closed.length > 20) this.closed.shift();
     }
+    this.disposeLarge(doc);
     this.docs.splice(i, 1);
     void api.bufferDelete(doc.id).catch(() => {});
     if (doc.id === this.activeId) {
@@ -500,6 +764,7 @@ export class Workspace {
 
   setEol(doc: Doc, eol: Eol): void {
     if (doc.eol === eol) return;
+    if (doc.large) return void toast(t("large.readOnly"), "info");
     doc.eol = eol;
     doc.forceDirty = true;
     this.emit("doc");
@@ -510,6 +775,7 @@ export class Workspace {
   /** "Convert to": the text stays, the next save writes it in `enc`. */
   setEncoding(doc: Doc, enc: Encoding): void {
     if (doc.encoding === enc) return;
+    if (doc.large) return void toast(t("large.readOnly"), "info");
     doc.encoding = enc;
     doc.forceDirty = true;
     this.emit("doc");
@@ -517,9 +783,17 @@ export class Workspace {
     this.persist();
   }
 
-  /** "Reopen with": discards the text and decodes the file again. */
+  /** "Reopen with": discards the text and decodes the file again. A large file reopens in the viewer, never whole. */
   async reopenWithEncoding(doc: Doc, enc: Encoding): Promise<void> {
     if (!doc.path) return;
+    if (doc.large) {
+      if (!(await this.openLarge(doc, enc))) return;
+      if (doc.id === this.activeId) await this.showLarge(doc);
+      this.emit("tabs");
+      this.emit("doc");
+      this.persist();
+      return;
+    }
     if (this.isDirty(doc) && !(await confirmSheet(t("reopen.title"), t("reopen.message"), t("reopen.confirm"), true))) return;
     try {
       this.replaceContents(doc, await api.openFileAs(doc.path, enc, settings.value.defaultEol));
@@ -572,6 +846,7 @@ export class Workspace {
         const doc = cand[i];
         const m = mtimes[i];
         if (!this.docs.includes(doc)) continue;
+        if (doc.follow && m !== null && !this.isDirty(doc)) continue; // the follow timer reloads it
         if (m === null) {
           if (!doc.missing) {
             doc.missing = true;
@@ -649,6 +924,7 @@ export class Workspace {
           scrollTop: d.scrollTop,
           scrollLeft: d.scrollLeft,
           savedMtimeMs: d.savedMtime,
+          bookmarks: this.stateOf(d) ? bookmarkedLines(this.stateOf(d)!) : d.bookmarks,
         })),
       });
     } catch (e) {
@@ -672,6 +948,7 @@ export class Workspace {
           langId: m.language ?? undefined, langManual: !!m.language,
           anchor: m.selectionAnchor, head: m.selectionHead,
           scrollTop: m.scrollTop, scrollLeft: m.scrollLeft, savedMtime: m.savedMtimeMs,
+          bookmarks: m.bookmarks ?? [],
         };
         if (m.buffer !== null) {
           let savedDoc: Text | null = null;

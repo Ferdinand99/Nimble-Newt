@@ -4,14 +4,15 @@ import { listen } from "@tauri-apps/api/event";
 import "./styles/style.css";
 import { accelFor, COMMAND_DEFS, matchesAccel } from "./app/commandDefs";
 import { openPalette, runCommand } from "./app/commands";
+import { loadFolderState } from "./app/folderState";
+import { restoreFolderPanel } from "./app/panels";
 import { onUpdateAvailable, showAvailable, startAutoUpdates } from "./app/updater";
 import { workspace } from "./app/workspace";
-import { api, errorMessage } from "./lib/api";
+import { api, errorMessage, listEncodings } from "./lib/api";
 import { isMac } from "./lib/dom";
 import { setLocale, t } from "./lib/i18n";
 import { PathInbox } from "./lib/pathInbox";
 import { applyTheme, settings } from "./lib/settings";
-import { openSettings } from "./ui/settings";
 import { initStatusbar } from "./ui/statusbar";
 import { initTabbar } from "./ui/tabbar";
 import { openSheet } from "./ui/dialog";
@@ -57,7 +58,7 @@ async function boot(): Promise<void> {
     workspace.loadRecent(),
   ]);
   mark("dataLoaded");
-  const locale = setLocale(settings.value.locale);
+  const locale = await setLocale(settings.value.locale);
   applySettings();
   localize();
   void api.setLocale(locale).catch(() => {});
@@ -81,7 +82,12 @@ async function boot(): Promise<void> {
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
       mark("painted");
-      void api.appReady(stages);
+      void api
+        .appReady(stages)
+        .then((selftest) => {
+          if (selftest) return import("./ext/host").then((m) => m.selfTest());
+        })
+        .catch(() => {});
     }),
   );
 
@@ -98,10 +104,23 @@ async function boot(): Promise<void> {
   inbox.attach((paths) => void workspace.openPaths(paths));
   document.getElementById("new-tab")!.addEventListener("click", () => {});
   document.getElementById("open-palette")!.addEventListener("click", () => void openPalette());
-  document.getElementById("open-settings")!.addEventListener("click", () => void openSettings());
+  document.getElementById("open-settings")!.addEventListener("click", () => runCommand("app.settings"));
 
   onUpdateAvailable((v) => status.setUpdate(v, () => void showAvailable()));
   startAutoUpdates();
+  // Extension manifests are read after the first paint; their scripts only load when a command runs.
+  void import("./ext/host").then((m) => m.initExtensions()).catch(() => {});
+  if (settings.value.minimap) void workspace.ensureMinimap();
+  if (settings.value.wordCompletion) void workspace.ensureCompletion();
+  void loadFolderState().then(() => restoreFolderPanel());
+  // A hand-edited or outdated default encoding must not break saving later.
+  void listEncodings().then((list) => {
+    if (!list.some((e) => e.label === settings.value.defaultEncoding)) settings.set({ defaultEncoding: "UTF-8" });
+  }).catch(() => {});
+  // Custom languages load after the first paint; open tabs pick them up when they are registered.
+  void import("./lib/userLanguageStore").then((m) => m.loadUserLanguages())
+    .then(() => workspace.redetectLanguages())
+    .catch(() => {});
   void workspace.checkExternal();
 }
 

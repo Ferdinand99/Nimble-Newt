@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import en from "../locales/en.json";
 import nb from "../locales/nb.json";
-import { resolveLocale } from "./i18n";
+import { LOCALES, matchLocale, resolveLocale } from "./i18n";
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {
@@ -11,6 +11,18 @@ function sources(dir: string): string[] {
     if (statSync(p).isDirectory()) return f === "locales" ? [] : sources(p);
     return /\.ts$/.test(f) && !f.endsWith(".test.ts") ? [p] : [];
   });
+}
+
+/** Keys staged in src/locales/_pending/*.en.json count as existing until they are merged. */
+function pending(lang: "en" | "nb"): Record<string, string> {
+  const dir = "src/locales/_pending";
+  let files: string[] = [];
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith(`.${lang}.json`));
+  } catch {
+    /* no pending keys */
+  }
+  return Object.assign({}, ...files.map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as Record<string, string>));
 }
 
 describe("locales", () => {
@@ -25,7 +37,11 @@ describe("locales", () => {
     for (const f of sources("src")) {
       for (const m of readFileSync(f, "utf8").matchAll(/\bt\(\s*["'`]([a-zA-Z0-9_.]+)["'`]/g)) used.add(m[1]);
     }
-    expect([...used].filter((k) => !(k in en)).sort()).toEqual([]);
+    const known = { ...en, ...pending("en") };
+    expect([...used].filter((k) => !(k in known)).sort()).toEqual([]);
+  });
+  it("pending Norwegian keys mirror pending English keys", () => {
+    expect(Object.keys(pending("nb")).sort()).toEqual(Object.keys(pending("en")).sort());
   });
   it("placeholders match between languages", () => {
     const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join();
@@ -35,5 +51,15 @@ describe("locales", () => {
     expect(resolveLocale("auto", "nb-NO")).toBe("nb");
     expect(resolveLocale("auto", "en-US")).toBe("en");
     expect(resolveLocale("nb")).toBe("nb");
+  });
+  it("maps system language tags to shipped locales", () => {
+    const cases: [string, string][] = [
+      ["pt-PT", "pt-PT"], ["pt", "pt-BR"], ["pt_BR", "pt-BR"], ["zh-Hans-CN", "zh-CN"], ["zh-Hant-TW", "zh-TW"], ["zh-HK", "zh-TW"],
+      ["zh", "zh-CN"], ["no", "nb"], ["nn-NO", "nb"], ["de-AT", "de"], ["FR-ca", "fr"], ["ar-EG", "ar"], ["xx", "en"], ["", "en"],
+    ];
+    for (const [tag, want] of cases) expect(matchLocale(tag), tag).toBe(want);
+  });
+  it("marks Arabic, Persian and Hebrew right-to-left", () => {
+    expect(LOCALES.filter((l) => l.rtl).map((l) => l.code)).toEqual(["ar", "fa", "he"]);
   });
 });

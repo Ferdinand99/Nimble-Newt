@@ -1,0 +1,51 @@
+.editor-col.split {
+  display: flex;
+}
+.editor-col.split > #editor {
+  flex: 0 0 var(--split, 50%);
+  min-width: 0;
+  min-height: 0;
+}
+.editor-col.split-below {
+  flex-direction: column;
+}
+.editor-col.split-below > #editor {
+  flex: 0 0 var(--split, 50%);
+}
+.split-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.split-pane .cm-editor {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--editor-size);
+}
+.split-pane .cm-scroller {
+  font-family: var(--editor-font);
+  line-height: 1.55;
+}
+.split-pane .cm-gutters {
+  border: 0;
+  background: var(--bg);
+  color: var(--muted);
+}
+.split-handle {
+  flex: none;
+  width: 7px;
+  background: var(--line);
+  cursor: col-resize;
+  touch-action: none;
+}
+.split-below .split-handle {
+  width: auto;
+  height: 7px;
+  cursor: row-resize;
+}
+.split-handle:hover,
+.split-handle:focus-visible {
+  background: var(--brand-ring);
+  outline: none;
+}

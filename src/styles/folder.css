@@ -1,0 +1,58 @@
+.folder-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.folder-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+.folder-filter {
+  padding: 8px 10px 4px;
+}
+.folder-tree {
+  margin: 0;
+  padding: 2px 6px 12px;
+  list-style: none;
+}
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 8px 3px calc(8px + var(--depth, 0) * 14px);
+  border: 0;
+  border-radius: var(--r-xs);
+  background: none;
+  font-size: 0.8125rem;
+  text-align: start;
+  white-space: nowrap;
+}
+.folder-row:hover {
+  background: var(--hover);
+}
+.folder-row[aria-current="true"] {
+  background: var(--brand-fill);
+  font-weight: 600;
+}
+.folder-row .icon {
+  color: var(--muted);
+}
+.folder-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.folder-empty,
+.folder-error {
+  padding: 8px 14px 8px calc(14px + var(--depth, 0) * 14px);
+  color: var(--muted);
+  font-size: 0.75rem;
+  list-style: none;
+}

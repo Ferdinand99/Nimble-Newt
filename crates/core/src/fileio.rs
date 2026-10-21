@@ -46,22 +46,28 @@ pub fn looks_binary(bytes: &[u8]) -> bool {
         return false;
     }
     !matches!(
-        encoding::detect(sample),
+        encoding::detect_sample(sample),
         TextEncoding::Utf16Le | TextEncoding::Utf16Be
     )
+}
+
+/// Refuses files too big to load whole into the editor; they belong in the large-file viewer.
+fn check_editable_size(path: &Path, len: u64) -> Result<()> {
+    if len > MAX_EDITABLE_BYTES {
+        return Err(Error::Msg(format!(
+            "{} is too large to edit ({} MB, limit {} MB)",
+            path.display(),
+            len / 1_048_576,
+            MAX_EDITABLE_BYTES / 1_048_576
+        )));
+    }
+    Ok(())
 }
 
 /// Reads `path`. `default_eol` is used when the file has no line break at all.
 pub fn read(path: &Path, default_eol: Eol) -> Result<OpenedFile> {
     let meta = std::fs::metadata(path)?;
-    if meta.len() > MAX_EDITABLE_BYTES {
-        return Err(Error::Msg(format!(
-            "{} is too large to edit ({} MB, limit {} MB)",
-            path.display(),
-            meta.len() / 1_048_576,
-            MAX_EDITABLE_BYTES / 1_048_576
-        )));
-    }
+    check_editable_size(path, meta.len())?;
     let bytes = std::fs::read(path)?;
     if looks_binary(&bytes) {
         return Err(Error::Msg(format!(
@@ -82,7 +88,9 @@ pub fn read(path: &Path, default_eol: Eol) -> Result<OpenedFile> {
 }
 
 /// Re-decodes a file with an explicit encoding (the "Reopen with encoding" action).
+/// Files above [`MAX_EDITABLE_BYTES`] are refused like in [`read`].
 pub fn read_as(path: &Path, enc: TextEncoding, default_eol: Eol) -> Result<OpenedFile> {
+    check_editable_size(path, std::fs::metadata(path)?.len())?;
     let bytes = std::fs::read(path)?;
     let (text, lossy) = encoding::decode_as(&bytes, enc);
     Ok(OpenedFile {
@@ -98,19 +106,23 @@ pub fn read_as(path: &Path, enc: TextEncoding, default_eol: Eol) -> Result<Opene
 
 /// Writes `text` (any line endings) to `path` as `enc` with `eol` line breaks.
 /// The write goes through a temporary file in the same directory so a crash never truncates the original.
+/// Characters the encoding cannot represent are replaced (reported in `WriteResult::lossy`).
 pub fn write(path: &Path, text: &str, enc: TextEncoding, eol: Eol) -> Result<WriteResult> {
-    write_checked(path, text, enc, eol, None)
+    write_checked(path, text, enc, eol, None, true)
 }
 
 /// Like [`write`], but refuses with [`Error::Conflict`] when the file exists and its modification
 /// time is not `expected_mtime_ms` (it changed on disk after the editor read it).
 /// `None` skips the check: new files, "Save As" and a confirmed overwrite.
+/// Without `allow_lossy`, text the encoding cannot represent is refused with [`Error::Lossy`]
+/// before anything is written.
 pub fn write_checked(
     path: &Path,
     text: &str,
     enc: TextEncoding,
     eol: Eol,
     expected_mtime_ms: Option<i64>,
+    allow_lossy: bool,
 ) -> Result<WriteResult> {
     if let (Some(expected), Some(actual)) = (expected_mtime_ms, mtime_ms(path)) {
         if expected != actual {
@@ -119,6 +131,9 @@ pub fn write_checked(
     }
     let normalised = eol::convert(text, eol);
     let encoded = encoding::encode(&normalised, enc);
+    if encoded.lossy && !allow_lossy {
+        return Err(Error::Lossy(enc.label().to_string()));
+    }
     write_bytes_atomic(path, &encoded.bytes)?;
     Ok(WriteResult {
         mtime_ms: mtime_ms(path).unwrap_or(0),
@@ -248,12 +263,13 @@ mod tests {
             TextEncoding::Utf8,
             Eol::Lf,
             Some(first.mtime_ms),
+            false,
         )
         .unwrap_err();
         assert!(matches!(err, Error::Conflict(_)));
         assert_eq!(std::fs::read_to_string(&p).unwrap(), "theirs");
         // A confirmed overwrite (no expectation) goes through.
-        write_checked(&p, "overwrite", TextEncoding::Utf8, Eol::Lf, None).unwrap();
+        write_checked(&p, "overwrite", TextEncoding::Utf8, Eol::Lf, None, false).unwrap();
         assert_eq!(std::fs::read_to_string(&p).unwrap(), "overwrite");
     }
 
@@ -262,8 +278,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("a.txt");
         // New file: nothing on disk to conflict with, even with an expectation.
-        let w = write_checked(&p, "one", TextEncoding::Utf8, Eol::Lf, Some(123)).unwrap();
-        write_checked(&p, "two", TextEncoding::Utf8, Eol::Lf, Some(w.mtime_ms)).unwrap();
+        let w = write_checked(&p, "one", TextEncoding::Utf8, Eol::Lf, Some(123), false).unwrap();
+        write_checked(
+            &p,
+            "two",
+            TextEncoding::Utf8,
+            Eol::Lf,
+            Some(w.mtime_ms),
+            false,
+        )
+        .unwrap();
         assert_eq!(std::fs::read_to_string(&p).unwrap(), "two");
     }
 
@@ -325,5 +349,54 @@ mod tests {
                 .unwrap()
                 .lossy
         );
+    }
+
+    #[test]
+    fn unrepresentable_characters_are_refused_unless_allowed() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("a.txt");
+        std::fs::write(&p, b"old").unwrap();
+        let enc = TextEncoding::Windows1252;
+        let err = write_checked(&p, "日本", enc, Eol::Lf, None, false).unwrap_err();
+        assert!(matches!(&err, Error::Lossy(l) if l == "Windows-1252"));
+        assert_eq!(std::fs::read(&p).unwrap(), b"old");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+        let w = write_checked(&p, "日本", enc, Eol::Lf, None, true).unwrap();
+        assert!(w.lossy);
+        assert_ne!(std::fs::read(&p).unwrap(), b"old");
+        // Representable text is fine either way.
+        assert!(
+            !write_checked(&p, "café", enc, Eol::Lf, None, false)
+                .unwrap()
+                .lossy
+        );
+    }
+
+    #[test]
+    fn unicode_encodings_never_refuse() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("a.txt");
+        for enc in [
+            TextEncoding::Utf8,
+            TextEncoding::Utf8Bom,
+            TextEncoding::Utf16Le,
+            TextEncoding::Utf16Be,
+        ] {
+            let w = write_checked(&p, "日本 😀 æ", enc, Eol::Lf, None, false).unwrap();
+            assert!(!w.lossy);
+            assert_eq!(read(&p, Eol::Lf).unwrap().text, "日本 😀 æ");
+        }
+    }
+
+    #[test]
+    fn reopening_a_huge_file_with_an_encoding_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("big.log");
+        let f = std::fs::File::create(&p).unwrap();
+        f.set_len(MAX_EDITABLE_BYTES + 1).unwrap(); // sparse: no real disk use
+        drop(f);
+        let err = read_as(&p, TextEncoding::Utf8, Eol::Lf).unwrap_err();
+        assert!(err.to_string().contains("too large"), "{err}");
+        assert!(read(&p, Eol::Lf).is_err());
     }
 }

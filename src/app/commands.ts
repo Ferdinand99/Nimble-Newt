@@ -1,49 +1,37 @@
 import { copyLineDown, deleteLine, moveLineDown, moveLineUp, redo, selectAll, toggleBlockComment, toggleComment, undo } from "@codemirror/commands";
-import { findNext, findPrevious, openSearchPanel, selectNextOccurrence } from "@codemirror/search";
+import { EditorSelection } from "@codemirror/state";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { findNext, findPrevious, getSearchQuery, openSearchPanel, selectNextOccurrence } from "@codemirror/search";
 import type { EditorView } from "@codemirror/view";
+import { addBookmarkLines, bookmarkedLines, bookmarkedText, clearBookmarks, invertBookmarks, jumpBookmark, removeLines, toggleBookmarkAt } from "../editor/bookmarks";
 import { addCursorAbove, addCursorBelow } from "../editor/commands";
+import { clearHighlights, textToHighlight, toggleHighlight } from "../editor/highlights";
+import { recorder } from "../editor/macroRecorder";
 import { requestReplaceRow } from "../editor/findpanel";
-import { ENCODINGS, EOLS } from "../lib/api";
+import { EOLS } from "../lib/api";
+import { pickEncoding } from "../ui/encodingPick";
 import { isMac } from "../lib/dom";
 import { t } from "../lib/i18n";
 import { dirname, formatShortcut } from "../lib/logic";
 import { FONT_MAX, FONT_MIN, settings } from "../lib/settings";
+import { openFolder, togglePanel, toggleFolder } from "./panels";
 import { promptNumber } from "../ui/dialog";
-import { openFindInFiles } from "../ui/fif";
 import { showMenu } from "../ui/menu";
 import { quickPick } from "../ui/palette";
-import { openSettings } from "../ui/settings";
 import { toast } from "../ui/toast";
-import { accelFor, COMMAND_DEFS } from "./commandDefs";
+import { extensionCommands, isExtensionCommand } from "../ext/registry";
+import { accelFor, COMMAND_DEFS, MACRO_COMMANDS, MACRO_NOT_RECORDED } from "./commandDefs";
+import * as macros from "./macros";
 import { checkForUpdates } from "./updater";
 import { workspace } from "./workspace";
 import { LANGUAGES } from "../lib/languages";
 
-const view = (): EditorView => workspace.view;
-const cm = (cmd: (v: EditorView) => boolean) => () => {
-  cmd(view());
+const view = (): EditorView => workspace.focusedView();
+const cm = (cmd: (v: EditorView) => boolean) => (): boolean => {
+  const ok = cmd(view());
   workspace.focus();
+  return ok;
 };
-
-function transformSelection(fn: (s: string) => string): void {
-  const v = view();
-  v.dispatch(v.state.changeByRange((r) => {
-    if (r.empty) return { range: r };
-    const text = fn(v.state.sliceDoc(r.from, r.to));
-    return { changes: { from: r.from, to: r.to, insert: text }, range: { from: r.from, to: r.from + text.length } as never };
-  }));
-}
-
-function sortLines(): void {
-  const v = view();
-  const st = v.state;
-  const m = st.selection.main;
-  const from = st.doc.lineAt(m.empty ? 0 : m.from).from;
-  const to = st.doc.lineAt(m.empty ? st.doc.length : m.to).to;
-  const lines = st.sliceDoc(from, to).split("\n");
-  lines.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  v.dispatch({ changes: { from, to, insert: lines.join("\n") } });
-}
 
 function trimTrailing(): void {
   const v = view();
@@ -72,6 +60,12 @@ async function quickOpen(): Promise<void> {
 }
 
 async function gotoLine(): Promise<void> {
+  const lv = workspace.largeViewer();
+  if (lv) {
+    const n = await promptNumber(t("cmd.edit.gotoLine"), t("status.lineRange", { max: lv.totalLines.toLocaleString() }), 1, lv.totalLines);
+    if (n !== null) lv.goToLine(n);
+    return;
+  }
   const n = await promptNumber(t("cmd.edit.gotoLine"), t("status.lineRange", { max: view().state.doc.lines }), 1, view().state.doc.lines);
   if (n !== null) workspace.goTo(n, 0);
 }
@@ -83,10 +77,63 @@ async function pick<T extends string>(title: string, values: readonly T[], label
 
 const active = () => workspace.active;
 
-const handlers: Record<string, () => void | Promise<void>> = {
+/** Column edit: inserts text or a number sequence at every cursor / column-selection line. */
+async function columnEdit(): Promise<void> {
+  const v = view();
+  const ranges = v.state.selection.ranges;
+  const { askColumnEdit } = await import("../ui/columnEdit");
+  const values = await askColumnEdit(ranges.length);
+  if (!values) return;
+  v.dispatch(
+    v.state.changeByRange((r) => {
+      const insert = values[ranges.indexOf(r)] ?? "";
+      return { changes: { from: r.from, to: r.to, insert }, range: EditorSelection.cursor(r.from + insert.length) };
+    }),
+    { userEvent: "input" },
+  );
+  workspace.focus();
+}
+
+async function copyBookmarked(cut: boolean): Promise<void> {
+  const v = view();
+  const lines = bookmarkedLines(v.state);
+  if (!lines.length) return void toast(t("bookmark.none"), "info");
+  await navigator.clipboard.writeText(bookmarkedText(v.state));
+  if (cut) removeLines(v, true);
+  toast(t(cut ? "bookmark.removed" : "bookmark.copied", { n: lines.length }), "success");
+}
+
+function bookmarkRemove(removeMarked: boolean): void {
+  const v = view();
+  if (!bookmarkedLines(v.state).length) return void toast(t("bookmark.none"), "info");
+  toast(t("bookmark.removed", { n: removeLines(v, removeMarked) }), "info");
+}
+
+function bookmarkFromSearch(): void {
+  const v = view();
+  const q = getSearchQuery(v.state);
+  if (!q.search || !q.valid) return void toast(t("bookmark.noQuery"), "info");
+  const lines = new Set<number>();
+  const cursor = q.getCursor(v.state);
+  for (let r = cursor.next(); !r.done && lines.size < 50000; r = cursor.next()) lines.add(v.state.doc.lineAt(r.value.from).number);
+  addBookmarkLines(v, [...lines]);
+  toast(t("bookmark.added", { n: lines.size }), "success");
+}
+
+const highlight = (color: number) => () => {
+  const text = textToHighlight(view());
+  if (!toggleHighlight(view(), text, color)) toast(t("highlight.nothing"), "info");
+};
+
+/** A handler may report whether it did anything (`false` ends a macro run); no value counts as success. */
+const handlers: Record<string, () => void | boolean | Promise<void | boolean>> = {
   "file.new": () => void workspace.newDoc(),
   "file.open": () => workspace.openDialog(),
   "file.quickOpen": quickOpen,
+  "file.openLarge": async () => {
+    const sel = await openDialog({ multiple: false, directory: false, title: t("large.pick") });
+    if (typeof sel === "string") await workspace.openPaths([sel], undefined, true);
+  },
   "file.save": () => void (active() && workspace.save(active()!)),
   "file.saveAs": () => void (active() && workspace.saveAs(active()!)),
   "file.saveAll": () => void workspace.saveAll(),
@@ -96,11 +143,16 @@ const handlers: Record<string, () => void | Promise<void>> = {
   "edit.undo": cm(undo),
   "edit.redo": cm(redo),
   "edit.selectAll": cm(selectAll),
-  "edit.find": () => { requestReplaceRow(false); openSearchPanel(view()); },
+  "edit.find": () => {
+    const lv = workspace.largeViewer();
+    if (lv) return lv.showFind();
+    requestReplaceRow(false);
+    openSearchPanel(view());
+  },
   "edit.replace": () => { requestReplaceRow(true); openSearchPanel(view()); },
-  "edit.findNext": cm(findNext),
-  "edit.findPrev": cm(findPrevious),
-  "edit.findInFiles": () => openFindInFiles(),
+  "edit.findNext": () => (workspace.largeViewer() ? workspace.largeViewer()!.find("forward") : cm(findNext)()),
+  "edit.findPrev": () => (workspace.largeViewer() ? workspace.largeViewer()!.find("backward") : cm(findPrevious)()),
+  "edit.findInFiles": () => import("../ui/fif").then((m) => m.openFindInFiles()),
   "edit.gotoLine": gotoLine,
   "edit.duplicateLine": cm(copyLineDown),
   "edit.deleteLine": cm(deleteLine),
@@ -111,23 +163,41 @@ const handlers: Record<string, () => void | Promise<void>> = {
   "edit.selectNext": cm(selectNextOccurrence),
   "edit.addCursorAbove": cm(addCursorAbove),
   "edit.addCursorBelow": cm(addCursorBelow),
-  "edit.upperCase": () => transformSelection((s) => s.toUpperCase()),
-  "edit.lowerCase": () => transformSelection((s) => s.toLowerCase()),
+  "edit.columnEdit": columnEdit,
   "edit.trimTrailing": trimTrailing,
-  "edit.sortLines": sortLines,
+  ...Object.fromEntries([...COMMAND_DEFS.map((c) => c.id).filter((id) => id.startsWith("lineop.")), "edit.upperCase", "edit.lowerCase"].map((id) => [id, () => import("./lineOpsCommands").then((m) => m.lineOpHandlers[id]())])),
   "view.palette": () => openPalette(),
   "view.wrap": () => settings.set({ wordWrap: !settings.value.wordWrap }),
+  "view.minimap": () => settings.set({ minimap: !settings.value.minimap }),
+  "view.completion": () => settings.set({ wordCompletion: !settings.value.wordCompletion }),
   "view.whitespace": () => settings.set({ showWhitespace: !settings.value.showWhitespace }),
   "view.zoomIn": () => zoom(1),
   "view.zoomOut": () => zoom(-1),
   "view.zoomReset": () => zoom(null),
+  "view.folder": () => toggleFolder(),
+  "file.openFolder": () => openFolder(),
+  "view.split": () => import("./split").then((m) => m.toggleSplit("right")),
+  "view.splitBelow": () => import("./split").then((m) => m.toggleSplit("below")),
+  "view.splitTabs": () => import("./compare").then((m) => m.showTabsSideBySide()),
+  "view.splitClose": () => import("./split").then((m) => m.closeSplit()),
+  "view.outline": () => togglePanel("outline"),
   "view.nextTab": () => workspace.nextTab(1),
   "view.prevTab": () => workspace.nextTab(-1),
   "view.themeSystem": () => settings.set({ theme: "system" }),
   "view.themeLight": () => settings.set({ theme: "light" }),
   "view.themeDark": () => settings.set({ theme: "dark" }),
+  "doc.follow": () => void (active() && workspace.toggleFollow(active()!)),
   "doc.language": () => pick(t("status.selectLanguage"), LANGUAGES.map((l) => l.id), (id) => LANGUAGES.find((l) => l.id === id)!.name, (id) => void (active() && workspace.setLanguage(active()!, id))),
-  "doc.encoding": () => pick(t("cmd.doc.encoding"), ENCODINGS, (e) => e, (e) => active() && workspace.setEncoding(active()!, e)),
+  "doc.encoding": async () => {
+    const d = active();
+    const e = d && (await pickEncoding(t("cmd.doc.encoding"), d.encoding));
+    if (d && e) workspace.setEncoding(d, e);
+  },
+  "doc.reopenEncoding": async () => {
+    const d = active();
+    const e = d?.path && (await pickEncoding(t("cmd.doc.reopenEncoding"), d.encoding));
+    if (d && e) await workspace.reopenWithEncoding(d, e);
+  },
   "doc.eol": () => pick(t("cmd.doc.eol"), EOLS, (e) => t(`eol.${e}`), (e) => active() && workspace.setEol(active()!, e)),
   "doc.indent": () => {
     const d = active();
@@ -137,10 +207,46 @@ const handlers: Record<string, () => void | Promise<void>> = {
       { label: t("status.tabs", { n }), run: () => workspace.setIndent(d, { useTabs: true, size: n }) },
     ]), { x: window.innerWidth / 2 - 90, y: window.innerHeight / 3 });
   },
-  "app.settings": openSettings,
+  "macro.record": () => macros.toggleRecording(),
+  "macro.play": macros.playLast,
+  "macro.playMany": macros.playMany,
+  "macro.playToEnd": macros.playToEnd,
+  "macro.save": macros.saveLast,
+  "macro.runSaved": macros.runSaved,
+  "macro.deleteSaved": macros.deleteSaved,
+  "bookmark.toggle": () => toggleBookmarkAt(view()),
+  "bookmark.next": () => void (jumpBookmark(view(), 1) || toast(t("bookmark.none"), "info")),
+  "bookmark.prev": () => void (jumpBookmark(view(), -1) || toast(t("bookmark.none"), "info")),
+  "bookmark.clear": () => clearBookmarks(view()),
+  "bookmark.invert": () => invertBookmarks(view()),
+  "bookmark.copy": () => copyBookmarked(false),
+  "bookmark.cut": () => copyBookmarked(true),
+  "bookmark.delete": () => bookmarkRemove(true),
+  "bookmark.deleteUnmarked": () => bookmarkRemove(false),
+  "bookmark.fromSearch": bookmarkFromSearch,
+  "highlight.1": highlight(1),
+  "highlight.2": highlight(2),
+  "highlight.3": highlight(3),
+  "highlight.4": highlight(4),
+  "highlight.5": highlight(5),
+  "highlight.clear": () => clearHighlights(view()),
+  "compare.withTab": async () => (await import("./compare")).compareWithTab(),
+  "compare.withFile": async () => (await import("./compare")).compareWithFile(),
+  "compare.files": async () => (await import("./compare")).compareTwoFiles(),
+  "compare.close": async () => (await import("./compare")).closeCompare(),
+  "compare.next": async () => (await import("./compare")).nextDifference(),
+  "compare.prev": async () => (await import("./compare")).previousDifference(),
+  ...Object.fromEntries(COMMAND_DEFS.filter((c) => c.id.startsWith("tools.") && c.id !== "tools.panel").map((c) => c.id).map((id) => [id, () => import("./toolsCommands").then((m) => m.runTool(id))])),
+  "tools.panel": () => togglePanel("tools"),
+  "lang.userLanguages": async () => (await import("../ui/userLanguages")).openLanguagesSheet(),
+  "app.extensions": () => import("../ui/extensions").then((m) => m.openExtensionsSheet()),
+  "app.settings": () => import("../ui/settings").then((m) => m.openSettings()),
   "app.checkUpdates": () => checkForUpdates(true),
   "app.about": () => void toast("Nimble Newt — MIT License — github.com/Ferdinand99/Nimble-Newt", "info", 6000),
 };
+
+/** Commands that make sense for the read-only large-file viewer. */
+const LARGE_OK = /^(file\.|view\.|app\.|lang\.|compare\.files|doc\.follow|edit\.(find|findNext|findPrev|gotoLine)$|tools\.panel|tools\.hashFile|macro\.record)/;
 
 let lastRun = { id: "", at: 0 };
 
@@ -152,6 +258,15 @@ export function runCommand(id: string): void {
   const now = performance.now();
   if (lastRun.id === id && now - lastRun.at < 80) return;
   lastRun = { id, at: now };
+  if (workspace.active?.large && !LARGE_OK.test(id)) return void toast(t("large.notAvailable"), "info");
+  if (isExtensionCommand(id)) {
+    void import("../ext/host").then((m) => m.runExtensionCommand(id));
+    return;
+  }
+  if (recorder.recording && !recorder.playing) {
+    if (MACRO_COMMANDS.has(id)) recorder.push({ t: "cmd", c: id });
+    else if (MACRO_NOT_RECORDED.has(id)) toast(t("macro.notRecorded"), "info");
+  }
   const h = handlers[id];
   if (!h) return;
   void Promise.resolve(h()).catch((e) => toast(String(e), "error"));
@@ -162,6 +277,7 @@ export async function openPalette(): Promise<void> {
     const accel = accelFor(c, isMac);
     return { label: t(`cmd.${c.id}`), shortcut: accel ? formatShortcut(accel, isMac) : undefined, value: c.id };
   });
+  for (const c of extensionCommands()) items.push({ label: c.title, shortcut: undefined, value: c.id });
   const id = await quickPick(items, t("palette.placeholder"));
   if (id) {
     // Let the palette close and return focus first so commands act on the editor.
@@ -169,3 +285,19 @@ export async function openPalette(): Promise<void> {
     runCommand(id);
   }
 }
+
+/**
+ * Runs a command for macro playback (no de-duplication, no recording) and reports whether it worked, so
+ * "play to the end" and "N times" stop when Find Next finds nothing or a command fails.
+ */
+export async function runForMacro(id: string): Promise<boolean> {
+  const h = handlers[id];
+  if (!h) return false;
+  try {
+    return (await h()) !== false;
+  } catch {
+    return false;
+  }
+}
+
+macros.initMacros(runForMacro);

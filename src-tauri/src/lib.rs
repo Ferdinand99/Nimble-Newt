@@ -2,6 +2,7 @@
 //! single-instance forwarding and the updater.
 
 mod menu;
+mod sandbox;
 
 use nimble_core::encoding::TextEncoding;
 use nimble_core::eol::Eol;
@@ -77,13 +78,15 @@ async fn open_file_as(
 
 #[derive(Serialize)]
 struct SaveFailure {
-    /// `conflict`: the file changed on disk after it was opened; anything else is `other`.
+    /// `conflict`: the file changed on disk after it was opened; `lossy`: the text has characters the
+    /// encoding cannot hold (and `allow_lossy` was not set); anything else is `other`.
     kind: &'static str,
     message: String,
 }
 
 /// `expected_mtime_ms` is the modification time the editor last saw; a different time on disk
 /// is refused as a conflict. Pass `None` for new files, "Save As" and a confirmed overwrite.
+/// Unless `allow_lossy`, text the encoding cannot represent is refused (`lossy`) and nothing is written.
 #[tauri::command]
 async fn save_file(
     path: String,
@@ -91,16 +94,23 @@ async fn save_file(
     encoding: TextEncoding,
     eol: Eol,
     expected_mtime_ms: Option<i64>,
+    allow_lossy: bool,
 ) -> Result<WriteResult, SaveFailure> {
-    fileio::write_checked(Path::new(&path), &text, encoding, eol, expected_mtime_ms).map_err(|e| {
-        SaveFailure {
-            kind: if matches!(e, nimble_core::Error::Conflict(_)) {
-                "conflict"
-            } else {
-                "other"
-            },
-            message: e.to_string(),
-        }
+    fileio::write_checked(
+        Path::new(&path),
+        &text,
+        encoding,
+        eol,
+        expected_mtime_ms,
+        allow_lossy,
+    )
+    .map_err(|e| SaveFailure {
+        kind: match e {
+            nimble_core::Error::Conflict(_) => "conflict",
+            nimble_core::Error::Lossy(_) => "lossy",
+            _ => "other",
+        },
+        message: e.to_string(),
     })
 }
 
@@ -145,6 +155,434 @@ async fn doc_write(store: State<'_, SessionStore>, name: String, json: String) -
     store.write_doc(&name, &json).map_err(err)
 }
 
+#[derive(Serialize)]
+struct EncodingInfo {
+    label: &'static str,
+    group: &'static str,
+}
+
+/// Every encoding the editor can read and write, for the pickers.
+#[tauri::command]
+fn list_encodings() -> Vec<EncodingInfo> {
+    nimble_core::encoding::all()
+        .into_iter()
+        .map(|e| EncodingInfo {
+            label: e.label(),
+            group: e.group(),
+        })
+        .collect()
+}
+
+// ---- folder workspace ------------------------------------------------------------
+
+#[tauri::command]
+async fn list_dir(
+    path: String,
+    show_hidden: bool,
+    respect_gitignore: bool,
+) -> CmdResult<Vec<nimble_core::folder::Entry>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        nimble_core::folder::list_dir(
+            Path::new(&path),
+            nimble_core::folder::ListOptions {
+                show_hidden,
+                respect_gitignore,
+            },
+        )
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)
+}
+
+#[tauri::command]
+async fn find_files(
+    root: String,
+    query: String,
+    limit: usize,
+    show_hidden: bool,
+    respect_gitignore: bool,
+) -> CmdResult<Vec<String>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        nimble_core::folder::find_files(
+            Path::new(&root),
+            &query,
+            limit.clamp(1, 1000),
+            300_000,
+            nimble_core::folder::ListOptions {
+                show_hidden,
+                respect_gitignore,
+            },
+        )
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)
+}
+
+// ---- large files ---------------------------------------------------------------
+
+use nimble_core::largefile::{
+    self, CancelRegistry, Direction, Hit, IndexOptions, IndexStatus, LargeFile, LargeQuery,
+    LinesChunk, OpenInfo, SearchPos,
+};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+struct LargeHandle {
+    file: Arc<LargeFile>,
+    /// One cancellation flag per running search / count, by the id the viewer picked.
+    ops: CancelRegistry,
+    /// Stops the background indexer.
+    closed: Arc<AtomicBool>,
+}
+
+#[derive(Default)]
+struct LargeFiles(Mutex<(u64, std::collections::HashMap<u64, Arc<LargeHandle>>)>);
+
+impl LargeFiles {
+    fn get(&self, id: u64) -> CmdResult<Arc<LargeHandle>> {
+        self.0
+            .lock()
+            .unwrap()
+            .1
+            .get(&id)
+            .cloned()
+            .ok_or_else(|| "the file is no longer open".to_string())
+    }
+}
+
+/// Indexes in the background until the whole file is done or the viewer closed. Does nothing while
+/// an indexer is already running for this file.
+fn spawn_indexer(h: &LargeHandle) {
+    let _ = h.file.spawn_indexer(h.closed.clone());
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileMeta {
+    size: u64,
+    /// Above the limit for normal editing: such files open in the read-only large-file viewer.
+    large: bool,
+}
+
+#[tauri::command]
+async fn file_meta(path: String) -> CmdResult<FileMeta> {
+    let size = std::fs::metadata(&path).map_err(err)?.len();
+    Ok(FileMeta {
+        size,
+        large: size > fileio::MAX_EDITABLE_BYTES,
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LargeOpened {
+    id: u64,
+    info: OpenInfo,
+    status: IndexStatus,
+}
+
+#[tauri::command]
+async fn lf_open(
+    files: State<'_, LargeFiles>,
+    path: String,
+    encoding: Option<TextEncoding>,
+) -> CmdResult<LargeOpened> {
+    let (file, info) = tauri::async_runtime::spawn_blocking(move || {
+        LargeFile::open_with(Path::new(&path), IndexOptions::default(), encoding)
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)?;
+    let status = file.status();
+    let handle = Arc::new(LargeHandle {
+        file: Arc::new(file),
+        ops: CancelRegistry::default(),
+        closed: Arc::default(),
+    });
+    let id = {
+        let mut g = files.0.lock().unwrap();
+        g.0 += 1;
+        let id = g.0;
+        g.1.insert(id, handle.clone());
+        id
+    };
+    spawn_indexer(&handle);
+    Ok(LargeOpened { id, info, status })
+}
+
+#[tauri::command]
+async fn lf_status(files: State<'_, LargeFiles>, id: u64) -> CmdResult<IndexStatus> {
+    Ok(files.get(id)?.file.status())
+}
+
+#[tauri::command]
+async fn lf_read(
+    files: State<'_, LargeFiles>,
+    id: u64,
+    first: u64,
+    count: usize,
+    max_chars: usize,
+) -> CmdResult<LinesChunk> {
+    let h = files.get(id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        h.file
+            .read_lines(first, count.min(500), max_chars.clamp(80, 20_000))
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)
+}
+
+#[tauri::command]
+async fn lf_search(
+    files: State<'_, LargeFiles>,
+    id: u64,
+    query: LargeQuery,
+    from: SearchPos,
+    direction: Direction,
+    op: u64,
+) -> CmdResult<Option<Hit>> {
+    let h = files.get(id)?;
+    let cancel = h.ops.begin(op);
+    let r = tauri::async_runtime::spawn_blocking(move || {
+        let r = h.file.search(&query, from, direction, &cancel);
+        h.ops.end(op);
+        r
+    })
+    .await;
+    r.map_err(err)?.map_err(|e| {
+        if largefile::is_cancelled(&e) {
+            largefile::CANCELLED.to_string()
+        } else {
+            e.to_string()
+        }
+    })
+}
+
+#[tauri::command]
+async fn lf_count(
+    files: State<'_, LargeFiles>,
+    id: u64,
+    query: LargeQuery,
+    op: u64,
+) -> CmdResult<u64> {
+    let h = files.get(id)?;
+    let cancel = h.ops.begin(op);
+    let r = tauri::async_runtime::spawn_blocking(move || {
+        let r = h.file.count_matches(&query, &cancel, &mut |_| {});
+        h.ops.end(op);
+        r
+    })
+    .await;
+    r.map_err(err)?.map_err(|e| {
+        if largefile::is_cancelled(&e) {
+            largefile::CANCELLED.to_string()
+        } else {
+            e.to_string()
+        }
+    })
+}
+
+/// Stops the search or count `op` of this file; without `op`, all that run now.
+#[tauri::command]
+fn lf_cancel(files: State<'_, LargeFiles>, id: u64, op: Option<u64>) {
+    if let Ok(h) = files.get(id) {
+        match op {
+            Some(op) => h.ops.cancel(op),
+            None => h.ops.cancel_all(),
+        }
+    }
+}
+
+/// Picks up appended data (follow mode) and restarts the indexer for the new part.
+#[tauri::command]
+async fn lf_refresh(files: State<'_, LargeFiles>, id: u64) -> CmdResult<IndexStatus> {
+    let h = files.get(id)?;
+    let h2 = h.clone();
+    let st = tauri::async_runtime::spawn_blocking(move || h2.file.refresh())
+        .await
+        .map_err(err)?
+        .map_err(err)?;
+    if !st.done {
+        spawn_indexer(&h);
+    }
+    Ok(st)
+}
+
+#[tauri::command]
+fn lf_close(files: State<'_, LargeFiles>, id: u64) {
+    if let Some(h) = files.0.lock().unwrap().1.remove(&id) {
+        h.closed.store(true, Ordering::Relaxed);
+        h.ops.cancel_all();
+    }
+}
+
+// ---- hashes -------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct Digest {
+    algorithm: nimble_core::hash::Algorithm,
+    hex: String,
+}
+
+fn digests(r: Vec<(nimble_core::hash::Algorithm, String)>) -> Vec<Digest> {
+    r.into_iter()
+        .map(|(algorithm, hex)| Digest { algorithm, hex })
+        .collect()
+}
+
+/// Digests of UTF-8 text (the editor's text, always with `\n` line breaks).
+#[tauri::command]
+async fn hash_text(
+    text: String,
+    algorithms: Vec<nimble_core::hash::Algorithm>,
+) -> CmdResult<Vec<Digest>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        nimble_core::hash::hash_reader(&algorithms, text.as_bytes())
+    })
+    .await
+    .map_err(err)?
+    .map(digests)
+    .map_err(err)
+}
+
+/// Digests of a file's raw bytes.
+#[tauri::command]
+async fn hash_file(
+    path: String,
+    algorithms: Vec<nimble_core::hash::Algorithm>,
+) -> CmdResult<Vec<Digest>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        nimble_core::hash::hash_file(Path::new(&path), &algorithms)
+    })
+    .await
+    .map_err(err)?
+    .map(digests)
+    .map_err(err)
+}
+
+// ---- compare -------------------------------------------------------------
+
+/// Decoded texts of finished file comparisons, so the UI can fetch the lines of a hunk without
+/// reading the files again.
+type ComparedTexts = std::collections::HashMap<u64, (String, String)>;
+
+#[derive(Default)]
+struct CompareCache(Mutex<(u64, ComparedTexts)>);
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileComparison {
+    id: u64,
+    comparison: nimble_core::diff::Comparison,
+    eol_a: Eol,
+    eol_b: Eol,
+}
+
+/// Compares two texts (used for tabs that are too big for the in-page diff).
+#[tauri::command]
+async fn compare_text(
+    a: String,
+    b: String,
+    options: nimble_core::diff::DiffOptions,
+) -> CmdResult<nimble_core::diff::Comparison> {
+    tauri::async_runtime::spawn_blocking(move || nimble_core::diff::compare(&a, &b, &options))
+        .await
+        .map_err(err)
+}
+
+/// Compares two files on disk and keeps their text for `compare_lines`.
+#[tauri::command]
+async fn compare_files(
+    cache: State<'_, CompareCache>,
+    a: String,
+    b: String,
+    options: nimble_core::diff::DiffOptions,
+) -> CmdResult<FileComparison> {
+    let (fa, fb) = tauri::async_runtime::spawn_blocking(move || -> nimble_core::Result<_> {
+        Ok((
+            fileio::read(Path::new(&a), Eol::Lf)?,
+            fileio::read(Path::new(&b), Eol::Lf)?,
+        ))
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)?;
+    let (eol_a, eol_b) = (fa.eol, fb.eol);
+    let (ta, tb) = (fa.text, fb.text);
+    let opts = options.clone();
+    let (ta2, tb2) = (ta.clone(), tb.clone());
+    let comparison =
+        tauri::async_runtime::spawn_blocking(move || nimble_core::diff::compare(&ta2, &tb2, &opts))
+            .await
+            .map_err(err)?;
+    let mut guard = cache.0.lock().unwrap();
+    guard.0 += 1;
+    let id = guard.0;
+    // Keep only the latest few comparisons.
+    if guard.1.len() >= 4 {
+        let oldest = *guard.1.keys().min().unwrap();
+        guard.1.remove(&oldest);
+    }
+    guard.1.insert(id, (ta, tb));
+    Ok(FileComparison {
+        id,
+        comparison,
+        eol_a,
+        eol_b,
+    })
+}
+
+/// Lines `[start, start + len)` of side `a` or `b` of a finished file comparison.
+#[tauri::command]
+async fn compare_lines(
+    cache: State<'_, CompareCache>,
+    id: u64,
+    side: String,
+    start: usize,
+    len: usize,
+) -> CmdResult<Vec<String>> {
+    let guard = cache.0.lock().unwrap();
+    let (a, b) = guard.1.get(&id).ok_or("comparison expired")?;
+    Ok(nimble_core::diff::slice_lines(
+        if side == "a" { a } else { b },
+        start,
+        len.min(2000),
+    ))
+}
+
+#[tauri::command]
+fn compare_close(cache: State<'_, CompareCache>, id: u64) {
+    cache.0.lock().unwrap().1.remove(&id);
+}
+
+// ---- user-defined languages ------------------------------------------------
+
+/// Validates a JSON or TOML definition and returns it normalised as JSON.
+#[tauri::command]
+async fn parse_language_definition(text: String, format: String) -> CmdResult<String> {
+    let format: nimble_core::userlang::Format = format.parse().map_err(err)?;
+    let def = nimble_core::userlang::parse_definition(&text, format).map_err(err)?;
+    nimble_core::userlang::to_json(&def).map_err(err)
+}
+
+/// Converts a definition (JSON) to "json" or "toml" for export.
+#[tauri::command]
+async fn serialize_language_definition(json: String, format: String) -> CmdResult<String> {
+    let format: nimble_core::userlang::Format = format.parse().map_err(err)?;
+    let def = nimble_core::userlang::parse_definition(&json, nimble_core::userlang::Format::Json)
+        .map_err(err)?;
+    nimble_core::userlang::serialize(&def, format).map_err(err)
+}
+
+/// The commented starter template (TOML).
+#[tauri::command]
+fn language_template() -> String {
+    nimble_core::userlang::starter_template()
+}
+
 // ---- search --------------------------------------------------------------
 
 #[tauri::command]
@@ -182,7 +620,163 @@ fn take_pending_paths(pending: State<'_, Pending>) -> Vec<String> {
 
 #[tauri::command]
 fn set_locale(app: AppHandle, locale: String) -> CmdResult<()> {
-    let m = menu::build(&app, &locale).map_err(err)?;
+    let m =
+        menu::build(&app, &locale, &app.state::<MenuExtras>().0.lock().unwrap()).map_err(err)?;
+    app.set_menu(m).map_err(err)?;
+    Ok(())
+}
+
+// ---- extensions ----------------------------------------------------------------------------
+
+type ExtList = (
+    Vec<nimble_core::extensions::InstalledExtension>,
+    Vec<String>,
+);
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExtListing {
+    extensions: Vec<nimble_core::extensions::InstalledExtension>,
+    problems: Vec<String>,
+}
+
+fn ext_install_path(
+    store: &nimble_core::extensions::ExtensionStore,
+    path: &str,
+    allow_same: bool,
+    expected: &nimble_core::extensions::Manifest,
+) -> nimble_core::Result<nimble_core::extensions::Manifest> {
+    let p = std::path::Path::new(path);
+    if p.is_dir() {
+        store.install_from_dir(p, env!("CARGO_PKG_VERSION"), allow_same, Some(expected))
+    } else {
+        store.install_from_zip(p, env!("CARGO_PKG_VERSION"), allow_same, Some(expected))
+    }
+}
+
+/// Reading, unpacking and validating packages touches the disk, so these commands run off the UI thread.
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> CmdResult<T> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(err)
+}
+
+#[tauri::command]
+async fn ext_list(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+) -> CmdResult<ExtListing> {
+    let store = store.inner().clone();
+    blocking(move || {
+        let (extensions, problems): ExtList = store.list();
+        ExtListing {
+            extensions,
+            problems,
+        }
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ext_inspect(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    path: String,
+) -> CmdResult<nimble_core::extensions::Manifest> {
+    let store = store.inner().clone();
+    blocking(move || {
+        store
+            .inspect(std::path::Path::new(&path), env!("CARGO_PKG_VERSION"))
+            .map_err(err)
+    })
+    .await?
+}
+
+/// `expected` is the manifest the user approved after `ext_inspect`; the install is refused if the package
+/// no longer has exactly that manifest.
+#[tauri::command]
+async fn ext_install(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    path: String,
+    allow_same: bool,
+    expected: nimble_core::extensions::Manifest,
+) -> CmdResult<nimble_core::extensions::Manifest> {
+    let store = store.inner().clone();
+    blocking(move || ext_install_path(&store, &path, allow_same, &expected).map_err(err)).await?
+}
+
+#[tauri::command]
+fn ext_remove(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+) -> CmdResult<()> {
+    store.remove(&id).map_err(err)
+}
+
+#[tauri::command]
+fn ext_set_enabled(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+    enabled: bool,
+) -> CmdResult<()> {
+    store.set_enabled(&id, enabled).map_err(err)
+}
+
+#[tauri::command]
+fn ext_read_main(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+) -> CmdResult<String> {
+    store.read_main(&id).map_err(err)
+}
+
+#[tauri::command]
+fn ext_storage_get(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+    key: String,
+) -> CmdResult<Option<serde_json::Value>> {
+    store.storage_get(&id, &key).map_err(err)
+}
+
+#[tauri::command]
+fn ext_storage_set(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+    key: String,
+    value: serde_json::Value,
+) -> CmdResult<()> {
+    store.storage_set(&id, &key, &value).map_err(err)
+}
+
+#[tauri::command]
+fn ext_storage_remove(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+    key: String,
+) -> CmdResult<()> {
+    store.storage_remove(&id, &key).map_err(err)
+}
+
+#[tauri::command]
+fn sandbox_stage(docs: State<'_, sandbox::SandboxDocs>, html: String) -> String {
+    docs.stage(html)
+}
+
+#[tauri::command]
+fn sandbox_release(docs: State<'_, sandbox::SandboxDocs>, id: String) {
+    docs.release(&id);
+}
+
+#[derive(Default)]
+struct MenuExtras(Mutex<Vec<menu::Extra>>);
+
+/// Rebuilds the native menu with the commands that extensions contribute (shown under Tools, Extensions).
+#[tauri::command]
+fn set_extension_menu(
+    app: AppHandle,
+    extras: State<'_, MenuExtras>,
+    locale: String,
+    items: Vec<menu::Extra>,
+) -> CmdResult<()> {
+    *extras.0.lock().unwrap() = items;
+    let m = menu::build(&app, &locale, &extras.0.lock().unwrap()).map_err(err)?;
     app.set_menu(m).map_err(err)?;
     Ok(())
 }
@@ -191,7 +785,7 @@ fn set_locale(app: AppHandle, locale: String) -> CmdResult<()> {
 /// (process `run()` to usable window) plus the part spent in the page (`frontend_ms`).
 /// With `NIMBLE_STARTUP_REPORT=<file>` it writes the numbers there and quits.
 #[tauri::command]
-fn app_ready(app: AppHandle, frontend_ms: f64, stages: serde_json::Value) {
+fn app_ready(app: AppHandle, frontend_ms: f64, stages: serde_json::Value) -> bool {
     let ms = START
         .get()
         .map(|s| s.elapsed().as_secs_f64() * 1000.0)
@@ -199,7 +793,10 @@ fn app_ready(app: AppHandle, frontend_ms: f64, stages: serde_json::Value) {
     eprintln!(
         "nimble-newt: ready in {ms:.0} ms (page load to ready: {frontend_ms:.0} ms) {stages}"
     );
-    if let Ok(path) = std::env::var("NIMBLE_STARTUP_REPORT") {
+    // With `NIMBLE_EXT_SELFTEST=<file>` the page runs the built-in Word Count extension and reports back through
+    // `selftest_done`, so CI can prove extensions work in a release build; the start-up report waits for that.
+    let selftest = std::env::var_os("NIMBLE_EXT_SELFTEST").is_some();
+    if let (false, Ok(path)) = (selftest, std::env::var("NIMBLE_STARTUP_REPORT")) {
         let _ = std::fs::write(
             path,
             format!(
@@ -208,6 +805,19 @@ fn app_ready(app: AppHandle, frontend_ms: f64, stages: serde_json::Value) {
         );
         app.exit(0);
     }
+    selftest
+}
+
+/// Result of the extension self-test (see `app_ready`): writes `ok` or the failure message and exits.
+#[tauri::command]
+fn selftest_done(app: AppHandle, ok: bool, message: String) {
+    if let Some(path) = std::env::var_os("NIMBLE_EXT_SELFTEST") {
+        let _ = std::fs::write(
+            path,
+            format!("{}: {message}\n", if ok { "ok" } else { "failed" }),
+        );
+    }
+    app.exit(if ok { 0 } else { 1 });
 }
 
 #[tauri::command]
@@ -359,15 +969,27 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Pending::default())
         .manage(PendingUpdate::default())
+        .manage(CompareCache::default())
+        .manage(LargeFiles::default())
+        .manage(MenuExtras::default())
+        .manage(sandbox::SandboxDocs::default())
+        .register_uri_scheme_protocol(sandbox::SCHEME, |ctx, request| {
+            ctx.app_handle()
+                .state::<sandbox::SandboxDocs>()
+                .respond(request.uri().path())
+        })
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
+            app.manage(nimble_core::extensions::ExtensionStore::new(
+                dir.join("extensions"),
+            ));
             app.manage(SessionStore::new(dir).map_err(|e| e.to_string())?);
             let args = existing_files(
                 std::env::args().skip(1),
                 std::env::current_dir().ok().as_deref(),
             );
             app.state::<Pending>().deliver(args);
-            app.set_menu(menu::build(app.handle(), "en")?)?;
+            app.set_menu(menu::build(app.handle(), "en", &[])?)?;
             // The window starts hidden and the frontend shows it when ready. If the frontend never
             // gets that far, show it anyway so the user is not left with an invisible process.
             let handle = app.handle().clone();
@@ -403,10 +1025,44 @@ pub fn run() {
             doc_read,
             doc_write,
             search_folder,
+            parse_language_definition,
+            serialize_language_definition,
+            language_template,
+            list_encodings,
+            compare_text,
+            compare_files,
+            compare_lines,
+            compare_close,
+            file_meta,
+            list_dir,
+            find_files,
+            lf_open,
+            lf_status,
+            lf_read,
+            lf_search,
+            lf_count,
+            lf_cancel,
+            lf_refresh,
+            lf_close,
+            hash_text,
+            hash_file,
             replace_in_folder,
             take_pending_paths,
             set_locale,
+            set_extension_menu,
+            sandbox_stage,
+            sandbox_release,
+            ext_list,
+            ext_inspect,
+            ext_install,
+            ext_remove,
+            ext_set_enabled,
+            ext_read_main,
+            ext_storage_get,
+            ext_storage_set,
+            ext_storage_remove,
             app_ready,
+            selftest_done,
             restart_app,
             check_update,
             install_update,

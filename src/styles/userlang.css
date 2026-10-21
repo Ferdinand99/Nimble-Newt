@@ -1,0 +1,22 @@
+.userlang-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+.userlang-empty {
+  padding: var(--sp-4);
+  color: var(--muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
+.userlang-row-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--sp-2);
+}
+.userlang-hint {
+  margin: 0 4px var(--sp-2);
+  color: var(--muted);
+  font-size: 0.75rem;
+}

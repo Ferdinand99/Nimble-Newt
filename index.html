@@ -17,9 +17,13 @@
         <button class="btn btn-icon btn-plain btn-sm" id="open-settings" type="button"><svg class="icon" aria-hidden="true"><use href="/icons.svg#gear"></use></svg></button>
       </header>
       <main class="workspace" id="workspace">
-        <div id="editor"></div>
-        <div class="empty" id="empty" hidden></div>
-        <div class="drop-overlay" id="drop-overlay" hidden></div>
+        <aside class="side side-left" id="side-left" hidden></aside>
+        <div class="editor-col">
+          <div id="editor"></div>
+          <div class="empty" id="empty" hidden></div>
+          <div class="drop-overlay" id="drop-overlay" hidden></div>
+        </div>
+        <aside class="side side-right" id="side-right" hidden></aside>
       </main>
       <section class="fif" id="fif" hidden></section>
       <footer class="statusbar" id="statusbar"></footer>

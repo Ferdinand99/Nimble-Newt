@@ -1,5 +1,5 @@
 import { api, type Encoding, type Eol } from "./api";
-import { type LocalePref } from "./i18n";
+import { LOCALE_CODES, type LocalePref } from "./i18n";
 import { clamp } from "./logic";
 
 export interface Settings {
@@ -10,6 +10,8 @@ export interface Settings {
   insertSpaces: boolean;
   wordWrap: boolean;
   showWhitespace: boolean;
+  wordCompletion: boolean;
+  minimap: boolean;
   defaultEncoding: Encoding;
   defaultEol: Eol;
   restoreSession: boolean;
@@ -24,6 +26,8 @@ export const DEFAULTS: Settings = {
   insertSpaces: true,
   wordWrap: false,
   showWhitespace: false,
+  wordCompletion: true,
+  minimap: false,
   defaultEncoding: "UTF-8",
   defaultEol: /Windows/.test(navigator.userAgent) ? "CRLF" : "LF",
   restoreSession: true,
@@ -41,13 +45,15 @@ export function normalize(raw: unknown): Settings {
   const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) ? clamp(Math.round(v), lo, hi) : d);
   return {
     theme: pick(r.theme, ["system", "light", "dark"], DEFAULTS.theme),
-    locale: pick(r.locale, ["auto", "en", "nb"], DEFAULTS.locale),
+    locale: pick(r.locale, ["auto", ...LOCALE_CODES] as LocalePref[], DEFAULTS.locale),
     fontSize: num(r.fontSize, DEFAULTS.fontSize, FONT_MIN, FONT_MAX),
     tabSize: num(r.tabSize, DEFAULTS.tabSize, 1, 16),
     insertSpaces: bool(r.insertSpaces, DEFAULTS.insertSpaces),
     wordWrap: bool(r.wordWrap, DEFAULTS.wordWrap),
     showWhitespace: bool(r.showWhitespace, DEFAULTS.showWhitespace),
-    defaultEncoding: pick(r.defaultEncoding, ["UTF-8", "UTF-8 BOM", "UTF-16 LE", "UTF-16 BE", "Windows-1252"], DEFAULTS.defaultEncoding),
+    wordCompletion: bool(r.wordCompletion, DEFAULTS.wordCompletion),
+    minimap: bool(r.minimap, DEFAULTS.minimap),
+    defaultEncoding: typeof r.defaultEncoding === "string" && /^[A-Za-z0-9_. :-]{2,32}$/.test(r.defaultEncoding) ? r.defaultEncoding : DEFAULTS.defaultEncoding,
     defaultEol: pick(r.defaultEol, ["LF", "CRLF", "CR"], DEFAULTS.defaultEol),
     restoreSession: bool(r.restoreSession, DEFAULTS.restoreSession),
     autoUpdate: bool(r.autoUpdate, DEFAULTS.autoUpdate),

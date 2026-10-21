@@ -1,0 +1,23 @@
+.cm-minimap {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 84px;
+  overflow: hidden;
+  border-inline-start: 1px solid var(--line);
+  background: var(--bg-2);
+  cursor: pointer;
+  touch-action: none;
+}
+.cm-minimap-canvas {
+  display: block;
+  width: 84px;
+}
+.cm-minimap-slider {
+  position: absolute;
+  inset-inline: 0;
+  background: var(--fill);
+  border-block: 1px solid var(--line-strong);
+  pointer-events: none;
+}

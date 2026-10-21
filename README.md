@@ -32,12 +32,20 @@ Notepad++ simplicity, a clean Apple-inspired design, and a small native app buil
 
 - **Tabs and sessions.** Many tabs, drag to reorder, close / close others / close to the right. **Unsaved tabs (including "Untitled") survive quitting and restarting**, like Notepad++: their content lives in the app's data folder, never next to your files. Cursor position and scroll are restored too. Switch it off in Settings.
 - **Open and save.** Open from the menu, by drag and drop, with "Open with…" or as the default app for common file types. Modified marker on tabs, atomic saves (a crash never truncates your file), and a prompt to reload when a file changes on disk.
-- **Encodings and line endings.** Detects UTF-8 (with/without BOM), UTF-16 LE/BE and Windows-1252. Shown in the status bar; click to convert, or to reopen the file with another encoding. LF / CRLF / CR likewise. Characters that the target encoding cannot represent are reported, never silently lost.
-- **Syntax highlighting** for Plain text, Markdown, JSON, YAML, TOML, XML, HTML, CSS, JavaScript, TypeScript, Python, Rust, Go, C, C++, C#, Java, SQL, Shell, PowerShell, INI, Log and Diff. Chosen from the file name (or shebang) and switchable from the status bar.
+- **Encodings and line endings.** Detects UTF-8 (with/without BOM), UTF-16 LE/BE and about 35 legacy code pages (Windows-125x, ISO-8859, Shift-JIS, GBK, Big5, EUC-KR, KOI8…). Shown in the status bar; click to convert, or to reopen the file with another encoding. LF / CRLF / CR likewise. Characters that the target encoding cannot represent are reported, never silently lost.
+- **Syntax highlighting** for 96 languages, loaded on demand: chosen from the file name, shebang or (for untitled tabs) the content, and switchable from the status bar. Define **your own languages** (keywords, comments, strings) in Settings.
 - **Search and replace.** In-file find/replace with regex, case and whole-word options and live match counts. **Find in Files**: regex, glob filters, `.gitignore` aware, binary files skipped, clickable results, and a **Replace All preview** with per-file opt-out before anything is written.
-- **Editing.** Multiple cursors (Ctrl/Cmd+click, Ctrl/Cmd+D, Ctrl/Cmd+Alt+Up/Down), column selection (Alt+drag or Alt+Shift+arrows), duplicate / move / delete lines, toggle comments, auto-indent, bracket matching and closing, code folding, visible whitespace, word wrap, zoom (Ctrl/Cmd +/- or wheel).
+- **Editing.** Multiple cursors (Ctrl/Cmd+click, Ctrl/Cmd+D, Ctrl/Cmd+Alt+Up/Down), column selection (Alt+drag or Alt+Shift+arrows) and **column editing** with number sequences, duplicate / move / delete / join / sort / dedupe lines, toggle comments, auto-indent, bracket matching and closing, code folding, visible whitespace, word wrap, zoom, and **word completion** from the document.
+- **Macros.** Record (Ctrl/Cmd+Alt+R), play (Ctrl/Cmd+Alt+P), repeat several times or to the end of the file, and save named macros.
+- **Bookmarks and highlights.** Bookmarks in the gutter (Ctrl/Cmd+F2, F2 / Shift+F2) that survive a restart, and five highlight colours for occurrences.
+- **Compare.** Compare two tabs or files side by side with live editing and apply-change buttons (F7 / Shift+F7 to step); very large comparisons use a Rust diff and a hunk list.
+- **Split view and document map.** Two views of the same file with independent scrolling, an optional minimap, and a **function list / outline** panel (Ctrl/Cmd+Shift+O).
+- **Folder as workspace.** Open a folder to get a file tree and a filename filter (Ctrl/Cmd+Shift+E).
+- **Very large files.** Files above 256 MB open instantly in a read-only viewer that indexes in the background, with search, go to line and **follow** (tail) for growing logs. Smaller files are fully editable.
+- **Tools.** Format and minify JSON / XML, Base64 / URL / HTML / hex encoding, MD5 / SHA checksums for text or files, timestamp conversion and UUIDs, from a tools panel.
+- **Extensions.** Small sandboxed add-ons that contribute commands and text tools, with explicit permissions and no file or network access ([docs/extensions.md](docs/extensions.md)). Three are built in: Word Count, Markdown Helpers and Text Cleaner.
 - **Command palette** (Ctrl/Cmd+Shift+P) with every action, and **quick open** for recent files.
-- **Settings.** Theme (system / light / dark), language (English, Norwegian Bokmål), font size, tabs or spaces, default encoding and line ending, word wrap, whitespace, session restore, automatic updates.
+- **Settings.** Theme (system / light / dark), interface language (26, chosen automatically from the system or set by hand), font size, tabs or spaces, default encoding and line ending, word wrap, whitespace, session restore, automatic updates.
 - **Status bar.** Line/column, selection, indentation, language, encoding and line endings; everything is clickable.
 - **Automatic updates** from GitHub Releases, with signature verification (see [Updates](#updates)).
 - **Accessible by default.** Keyboard navigation everywhere, visible focus, `prefers-reduced-motion`, `prefers-contrast` and `prefers-reduced-transparency` respected, syntax colours that meet WCAG AA contrast.
@@ -154,16 +162,18 @@ This is **not yet the < 300 ms target**: roughly 0.3 s is process and webview st
 
 ## Translating
 
-UI strings live in `src/locales/<code>.json` (English is the source, Norwegian Bokmål `nb` is included) and native menu labels use the same files (`menu.*` keys). To add a language: copy `en.json`, translate the values (keep `{placeholders}`), register it in `src/lib/i18n.ts` and `src-tauri/src/menu.rs`, and add it to the language setting. `npm test` checks that every key exists in every language.
+UI strings live in `src/locales/<code>.json`; English is the source and there are 25 translations (ar, cs, da, de, es, fa, fi, fr, he, hu, it, ja, ko, nb, nl, pl, pt-BR, pt-PT, ro, ru, sv, tr, uk, zh-CN, zh-TW). Arabic, Persian and Hebrew mirror the interface; code and file content stay left-to-right. Native menu labels use the same files (`menu.*` and `cmd.*` keys). The translations were machine-written and have not been reviewed by native speakers, so corrections are very welcome.
+
+To fix or add a language: edit or copy `en.json`, translate the values (keep `{placeholders}`), add it to `LOCALES` in `src/lib/i18n.ts` and to the list in `src-tauri/src/menu.rs`. `npm test` fails unless every language has exactly the English keys and the same placeholders.
 
 ## Roadmap
 
-Not in this first version, but nothing stands in the way:
+Not done yet:
 
-- Large-file viewing (500 MB+) through the Rust backend, streamed in chunks (files above 256 MB are currently refused with a clear message)
-- Compare two files
-- Format JSON / XML / SQL, and a tools panel (Base64, URL encoding, hashes)
-- Extensions
+- Extension panels, access to other files and a catalogue for finding extensions
+- Showing two different tabs in an editable split (a side-by-side compare view already works)
+- Editing in the large-file viewer
+- Windows code signing ([docs/signing.md](docs/signing.md))
 
 ## License
 
