@@ -16,7 +16,7 @@ import { dirname, formatShortcut } from "../lib/logic";
 import { FONT_MAX, FONT_MIN, settings } from "../lib/settings";
 import { askColumnEdit } from "../ui/columnEdit";
 import { lineOpHandlers } from "./lineOpsCommands";
-import { togglePanel } from "./panels";
+import { openFolder, togglePanel, toggleFolder } from "./panels";
 import { promptNumber } from "../ui/dialog";
 import { openFindInFiles } from "../ui/fif";
 import { showMenu } from "../ui/menu";
@@ -173,6 +173,8 @@ const handlers: Record<string, () => void | Promise<void>> = {
   "view.zoomIn": () => zoom(1),
   "view.zoomOut": () => zoom(-1),
   "view.zoomReset": () => zoom(null),
+  "view.folder": () => toggleFolder(),
+  "file.openFolder": () => openFolder(),
   "view.outline": () => togglePanel("outline"),
   "view.nextTab": () => workspace.nextTab(1),
   "view.prevTab": () => workspace.nextTab(-1),

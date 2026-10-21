@@ -1,4 +1,5 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { folderState } from "../app/folderState";
 import { workspace } from "../app/workspace";
 import { api, errorMessage, type SearchOptions, type SearchReport } from "../lib/api";
 import { debounce, h, icon } from "../lib/dom";
@@ -209,7 +210,7 @@ export function openFindInFiles(withReplace = false): void {
   panel.hidden = false;
   if (!root) {
     const p = workspace.active?.path;
-    setRoot(p ? dirname(p) : "");
+    setRoot(folderState().root ?? (p ? dirname(p) : ""));
   }
   if (withReplace && !replaceMode) (panel.querySelector('[aria-label="' + t("find.toggleReplace") + '"]') as HTMLElement | null)?.click();
   const sel = workspace.view.state.sliceDoc(workspace.view.state.selection.main.from, workspace.view.state.selection.main.to);

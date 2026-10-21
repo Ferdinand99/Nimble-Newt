@@ -500,6 +500,13 @@
   },
   {
    "id": "file.openLarge"
+  },
+  {
+   "id": "view.folder",
+   "accel": "CmdOrCtrl+Shift+E"
+  },
+  {
+   "id": "file.openFolder"
   }
  ],
  "menu": [
@@ -509,6 +516,7 @@
     "file.new",
     "file.open",
     "file.openLarge",
+    "file.openFolder",
     "file.quickOpen",
     "-",
     "file.save",
@@ -645,6 +653,7 @@
    "id": "view",
    "items": [
     "view.palette",
+    "view.folder",
     "view.outline",
     "-",
     "view.wrap",

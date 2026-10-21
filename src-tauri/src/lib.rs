@@ -163,6 +163,53 @@ fn list_encodings() -> Vec<EncodingInfo> {
         .collect()
 }
 
+// ---- folder workspace ------------------------------------------------------------
+
+#[tauri::command]
+async fn list_dir(
+    path: String,
+    show_hidden: bool,
+    respect_gitignore: bool,
+) -> CmdResult<Vec<nimble_core::folder::Entry>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        nimble_core::folder::list_dir(
+            Path::new(&path),
+            nimble_core::folder::ListOptions {
+                show_hidden,
+                respect_gitignore,
+            },
+        )
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)
+}
+
+#[tauri::command]
+async fn find_files(
+    root: String,
+    query: String,
+    limit: usize,
+    show_hidden: bool,
+    respect_gitignore: bool,
+) -> CmdResult<Vec<String>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        nimble_core::folder::find_files(
+            Path::new(&root),
+            &query,
+            limit.clamp(1, 1000),
+            300_000,
+            nimble_core::folder::ListOptions {
+                show_hidden,
+                respect_gitignore,
+            },
+        )
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)
+}
+
 // ---- large files ---------------------------------------------------------------
 
 use nimble_core::largefile::{
@@ -787,6 +834,8 @@ pub fn run() {
             compare_lines,
             compare_close,
             file_meta,
+            list_dir,
+            find_files,
             lf_open,
             lf_status,
             lf_read,

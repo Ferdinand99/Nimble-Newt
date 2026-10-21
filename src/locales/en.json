@@ -501,5 +501,16 @@
  "large.notAvailable": "That command isn't available in the large file viewer.",
  "large.counting": "Counting…",
  "large.searching": "Searching…",
- "large.wrapped": "Search wrapped around the file."
+ "large.wrapped": "Search wrapped around the file.",
+ "cmd.view.folder": "Folder Panel",
+ "cmd.file.openFolder": "Open Folder as Workspace…",
+ "folder.title": "Folder",
+ "folder.filter": "Filter files",
+ "folder.tree": "Files",
+ "folder.open": "Open folder…",
+ "folder.refresh": "Refresh",
+ "folder.showHidden": "Show hidden files",
+ "folder.none": "Open a folder to browse its files here.",
+ "folder.noMatches": "No files match.",
+ "folder.tooMany": "Too many entries; use the filter."
 }

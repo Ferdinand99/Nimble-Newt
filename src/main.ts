@@ -4,6 +4,8 @@ import { listen } from "@tauri-apps/api/event";
 import "./styles/style.css";
 import { accelFor, COMMAND_DEFS, matchesAccel } from "./app/commandDefs";
 import { openPalette, runCommand } from "./app/commands";
+import { loadFolderState } from "./app/folderState";
+import { restoreFolderPanel } from "./app/panels";
 import { onUpdateAvailable, showAvailable, startAutoUpdates } from "./app/updater";
 import { workspace } from "./app/workspace";
 import { api, errorMessage, listEncodings } from "./lib/api";
@@ -102,6 +104,7 @@ async function boot(): Promise<void> {
 
   onUpdateAvailable((v) => status.setUpdate(v, () => void showAvailable()));
   startAutoUpdates();
+  void loadFolderState().then(() => restoreFolderPanel());
   // A hand-edited or outdated default encoding must not break saving later.
   void listEncodings().then((list) => {
     if (!list.some((e) => e.label === settings.value.defaultEncoding)) settings.set({ defaultEncoding: "UTF-8" });

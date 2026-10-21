@@ -1,11 +1,14 @@
 import { debounce } from "../lib/dom";
 import { t } from "../lib/i18n";
 import { createSidebar, type Sidebar } from "../ui/sidebar";
+import { folderState, saveFolderState } from "./folderState";
 import { workspace } from "./workspace";
 
 type PanelId = "outline" | "tools";
 
+let left: Sidebar | null = null;
 let right: Sidebar | null = null;
+let folderOpen = false;
 let current: PanelId | null = null;
 let outlineRefresh: (() => void) | null = null;
 
@@ -56,4 +59,43 @@ export function togglePanel(id: PanelId): void {
       outlineRefresh = null;
     };
   });
+}
+
+function leftSidebar(): Sidebar {
+  return (left ??= createSidebar("left", () => {
+    folderOpen = false;
+    saveFolderState({ open: false });
+  }));
+}
+
+/** Shows or hides the folder (workspace) tree in the left sidebar. */
+export function toggleFolder(open?: boolean): void {
+  const sb = leftSidebar();
+  const want = open ?? !(folderOpen && sb.isOpen());
+  if (!want) {
+    sb.close();
+    workspace.focus();
+    return;
+  }
+  folderOpen = true;
+  saveFolderState({ open: true });
+  sb.open(t("folder.title"), (body) => {
+    let destroy: (() => void) | undefined;
+    void import("../ui/folderPanel").then(({ createFolderPanel }) => {
+      if (!folderOpen) return;
+      destroy = createFolderPanel(body, () => {}).destroy;
+    });
+    return () => destroy?.();
+  });
+}
+
+/** Opens the folder panel again after a restart when it was open last time. */
+export function restoreFolderPanel(): void {
+  if (folderState().open && folderState().root) toggleFolder(true);
+}
+
+/** Lets the user pick a folder: shows the panel, which asks for one when none is set. */
+export function openFolder(): void {
+  saveFolderState({ root: null });
+  toggleFolder(true);
 }

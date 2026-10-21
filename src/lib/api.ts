@@ -184,7 +184,16 @@ export interface Digest {
   hex: string;
 }
 
+export interface FolderEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  size: number;
+}
+
 export const api = {
+  listDir: (path: string, showHidden: boolean, respectGitignore = true) => invoke<FolderEntry[]>("list_dir", { path, showHidden, respectGitignore }),
+  findFiles: (root: string, query: string, limit: number, showHidden: boolean, respectGitignore = true) => invoke<string[]>("find_files", { root, query, limit, showHidden, respectGitignore }),
   fileMeta: (path: string) => invoke<{ size: number; large: boolean }>("file_meta", { path }),
   lfOpen: (path: string, encoding: Encoding | null = null) => invoke<LargeOpened>("lf_open", { path, encoding }),
   lfStatus: (id: number) => invoke<IndexStatus>("lf_status", { id }),

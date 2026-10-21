@@ -501,5 +501,16 @@
  "large.notAvailable": "Den kommandoen er ikke tilgjengelig i storfil-visningen.",
  "large.counting": "Teller …",
  "large.searching": "Søker …",
- "large.wrapped": "Søket startet på nytt fra begynnelsen av fila."
+ "large.wrapped": "Søket startet på nytt fra begynnelsen av fila.",
+ "cmd.view.folder": "Mappepanel",
+ "cmd.file.openFolder": "Åpne mappe som arbeidsområde …",
+ "folder.title": "Mappe",
+ "folder.filter": "Filtrer filer",
+ "folder.tree": "Filer",
+ "folder.open": "Åpne mappe …",
+ "folder.refresh": "Oppdater",
+ "folder.showHidden": "Vis skjulte filer",
+ "folder.none": "Åpne en mappe for å bla gjennom filene her.",
+ "folder.noMatches": "Ingen filer passer.",
+ "folder.tooMany": "For mange oppføringer; bruk filteret."
 }
