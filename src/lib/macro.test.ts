@@ -111,3 +111,40 @@ describe("macro storage", () => {
     expect(b).toEqual([{ name: "fix", steps: [{ t: "text", s: "2" }] }]);
   });
 });
+
+describe("playMacro with commands that can fail", () => {
+  /** Find Next fails once the cursor is on the last line; every step may also be asynchronous. */
+  function finder(lines: number): MacroRunner & { pos: number } {
+    const r = {
+      pos: 0,
+      async exec(step: MacroStep) {
+        await Promise.resolve();
+        if (step.t === "cmd" && step.c === "findNext") {
+          if (r.pos >= lines - 1) return false;
+          r.pos++;
+        }
+        return true;
+      },
+      position: () => r.pos,
+      atEnd: () => false,
+    };
+    return r;
+  }
+  const findNext: MacroStep = { t: "cmd", c: "findNext" };
+
+  it("awaits asynchronous steps and stops N times when a step reports failure", async () => {
+    const r = finder(3);
+    expect(await playMacro({ steps: [findNext] }, r, { times: 10 })).toEqual({ passes: 2, stopped: "failed" });
+    expect(r.pos).toBe(2);
+  });
+  it("ends play-to-the-end quietly when the failing step could not move forward", async () => {
+    const r = finder(4);
+    expect(await playMacro({ steps: [findNext] }, r, { untilEnd: true })).toEqual({ passes: 3, stopped: "no-progress" });
+  });
+  it("a step that fails after the cursor moved is still a failure", async () => {
+    const r = finder(10);
+    const steps: MacroStep[] = [findNext, { t: "cmd", c: "broken" }];
+    const run = { ...r, exec: async (s: MacroStep) => (s.t === "cmd" && s.c === "broken" ? false : r.exec(s)), position: () => r.pos, atEnd: () => false };
+    expect(await playMacro({ steps }, run, { untilEnd: true })).toEqual({ passes: 0, stopped: "failed" });
+  });
+});

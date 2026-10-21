@@ -106,7 +106,8 @@ export const recordingExtension: Extension = Prec.highest([
   }),
 ]);
 
-export function viewRunner(view: EditorView, runApp: (id: string) => boolean): MacroRunner {
+/** `runApp` resolves to whether the app command did something (a failed Find Next, an error or an unknown id is `false`). */
+export function viewRunner(view: EditorView, runApp: (id: string) => Promise<boolean> | boolean): MacroRunner {
   return {
     exec(step) {
       if (step.t === "text") {
@@ -114,8 +115,8 @@ export function viewRunner(view: EditorView, runApp: (id: string) => boolean): M
         return true;
       }
       if (step.t === "cm") {
-        byName.get(step.c)?.(view);
-        return true;
+        // The editor command says whether it did anything: Down on the last line or Find Next without a match is `false`.
+        return byName.get(step.c)?.(view) ?? false;
       }
       return runApp(step.c);
     },

@@ -11,10 +11,10 @@ import { workspace } from "./workspace";
 
 let last: MacroStep[] | null = null;
 let saved: Macro[] = [];
-let runApp: (id: string) => boolean = () => false;
+let runApp: (id: string) => Promise<boolean> | boolean = () => false;
 let cancelRequested = false;
 
-export function initMacros(app: (id: string) => boolean): void {
+export function initMacros(app: (id: string) => Promise<boolean> | boolean): void {
   runApp = app;
   void api
     .docRead("macros")

@@ -359,20 +359,17 @@
    "macro": true
   },
   {
-   "id": "lineop.splitAt",
-   "macro": true
+   "id": "lineop.splitAt"
   },
   {
    "id": "lineop.numberLines",
    "macro": true
   },
   {
-   "id": "lineop.prefix",
-   "macro": true
+   "id": "lineop.prefix"
   },
   {
-   "id": "lineop.suffix",
-   "macro": true
+   "id": "lineop.suffix"
   },
   {
    "id": "lineop.titleCase",

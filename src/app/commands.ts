@@ -27,9 +27,10 @@ import { workspace } from "./workspace";
 import { LANGUAGES } from "../lib/languages";
 
 const view = (): EditorView => workspace.focusedView();
-const cm = (cmd: (v: EditorView) => boolean) => () => {
-  cmd(view());
+const cm = (cmd: (v: EditorView) => boolean) => (): boolean => {
+  const ok = cmd(view());
   workspace.focus();
+  return ok;
 };
 
 function trimTrailing(): void {
@@ -124,7 +125,8 @@ const highlight = (color: number) => () => {
   if (!toggleHighlight(view(), text, color)) toast(t("highlight.nothing"), "info");
 };
 
-const handlers: Record<string, () => void | Promise<void>> = {
+/** A handler may report whether it did anything (`false` ends a macro run); no value counts as success. */
+const handlers: Record<string, () => void | boolean | Promise<void | boolean>> = {
   "file.new": () => void workspace.newDoc(),
   "file.open": () => workspace.openDialog(),
   "file.quickOpen": quickOpen,
@@ -148,8 +150,8 @@ const handlers: Record<string, () => void | Promise<void>> = {
     openSearchPanel(view());
   },
   "edit.replace": () => { requestReplaceRow(true); openSearchPanel(view()); },
-  "edit.findNext": () => (workspace.largeViewer() ? void workspace.largeViewer()!.find("forward") : cm(findNext)()),
-  "edit.findPrev": () => (workspace.largeViewer() ? void workspace.largeViewer()!.find("backward") : cm(findPrevious)()),
+  "edit.findNext": () => (workspace.largeViewer() ? workspace.largeViewer()!.find("forward") : cm(findNext)()),
+  "edit.findPrev": () => (workspace.largeViewer() ? workspace.largeViewer()!.find("backward") : cm(findPrevious)()),
   "edit.findInFiles": () => import("../ui/fif").then((m) => m.openFindInFiles()),
   "edit.gotoLine": gotoLine,
   "edit.duplicateLine": cm(copyLineDown),
@@ -244,7 +246,7 @@ const handlers: Record<string, () => void | Promise<void>> = {
 };
 
 /** Commands that make sense for the read-only large-file viewer. */
-const LARGE_OK = /^(file\.|view\.|app\.|lang\.|compare\.files|doc\.follow|edit\.(find|findNext|findPrev|gotoLine)$|tools\.panel|macro\.record)/;
+const LARGE_OK = /^(file\.|view\.|app\.|lang\.|compare\.files|doc\.follow|edit\.(find|findNext|findPrev|gotoLine)$|tools\.panel|tools\.hashFile|macro\.record)/;
 
 let lastRun = { id: "", at: 0 };
 
@@ -281,10 +283,18 @@ export async function openPalette(): Promise<void> {
   }
 }
 
-/** Runs a command for macro playback: no de-duplication and no recording. */
-macros.initMacros((id) => {
+/**
+ * Runs a command for macro playback (no de-duplication, no recording) and reports whether it worked, so
+ * "play to the end" and "N times" stop when Find Next finds nothing or a command fails.
+ */
+export async function runForMacro(id: string): Promise<boolean> {
   const h = handlers[id];
   if (!h) return false;
-  void Promise.resolve(h()).catch(() => {});
-  return true;
-});
+  try {
+    return (await h()) !== false;
+  } catch {
+    return false;
+  }
+}
+
+macros.initMacros(runForMacro);

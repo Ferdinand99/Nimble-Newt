@@ -10,8 +10,8 @@ export interface Macro {
 
 /** What the engine needs from the editor. */
 export interface MacroRunner {
-  /** Runs one step; `false` means it could not run (e.g. Find Next found nothing), which ends playback. */
-  exec(step: MacroStep): boolean;
+  /** Runs one step and resolves to whether it worked; `false` (e.g. Find Next found nothing) ends playback. */
+  exec(step: MacroStep): boolean | Promise<boolean>;
   /** Cursor offset. "Play to end" keeps going only while a pass moves the cursor forward. */
   position(): number;
   /** True when the cursor is at the end of the document. */
@@ -58,7 +58,10 @@ export async function playMacro(
     if (untilEnd && runner.atEnd()) return { passes, stopped: "end" };
     const before = runner.position();
     for (const step of macro.steps) {
-      if (!runner.exec(step)) return { passes, stopped: "failed" };
+      if (!(await runner.exec(step))) {
+        // A step that fails on the last line (Down, Find Next with no match left) is how "to the end" finishes.
+        return { passes, stopped: untilEnd && runner.position() <= before ? "no-progress" : "failed" };
+      }
     }
     passes++;
     // Like Notepad++, the pass that no longer moves forward (the last line) still ran, then playback stops.

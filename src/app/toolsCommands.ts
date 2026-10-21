@@ -3,6 +3,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, errorMessage } from "../lib/api";
 import { h } from "../lib/dom";
 import { t } from "../lib/i18n";
+import { toolBlockedOnLarge } from "../lib/largeTools";
 import * as tools from "../lib/tools";
 import { openSheet } from "../ui/dialog";
 import { toast } from "../ui/toast";
@@ -117,5 +118,7 @@ const table: Record<string, () => void | Promise<void>> = {
 export const TOOL_IDS = Object.keys(table);
 
 export async function runTool(id: string): Promise<void> {
+  // The tools panel calls this directly, so the large-file check can't live only in runCommand.
+  if (toolBlockedOnLarge(id, !!workspace.active?.large)) return void toast(t("large.notAvailable"), "info");
   await table[id]?.();
 }
