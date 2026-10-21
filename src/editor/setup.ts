@@ -107,6 +107,11 @@ export function dynamicExtensions(o: ViewOptions, lang: Extension = []): Extensi
   ];
 }
 
+/** The full extension set for a secondary editor (comparison panes). */
+export function editorExtensions(o: ViewOptions, lang: Extension = []): Extension {
+  return [base, dynamicExtensions(o, lang)];
+}
+
 export function makeState(doc: string | Text, o: ViewOptions, lang: Extension = [], selection?: { anchor: number; head: number }): EditorState {
   const length = typeof doc === "string" ? doc.length : doc.length;
   const sel = selection ? EditorSelection.single(Math.min(selection.anchor, length), Math.min(selection.head, length)) : undefined;

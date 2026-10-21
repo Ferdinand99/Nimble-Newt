@@ -163,6 +163,101 @@ fn list_encodings() -> Vec<EncodingInfo> {
         .collect()
 }
 
+// ---- compare -------------------------------------------------------------
+
+/// Decoded texts of finished file comparisons, so the UI can fetch the lines of a hunk without
+/// reading the files again.
+type ComparedTexts = std::collections::HashMap<u64, (String, String)>;
+
+#[derive(Default)]
+struct CompareCache(Mutex<(u64, ComparedTexts)>);
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileComparison {
+    id: u64,
+    comparison: nimble_core::diff::Comparison,
+    eol_a: Eol,
+    eol_b: Eol,
+}
+
+/// Compares two texts (used for tabs that are too big for the in-page diff).
+#[tauri::command]
+async fn compare_text(
+    a: String,
+    b: String,
+    options: nimble_core::diff::DiffOptions,
+) -> CmdResult<nimble_core::diff::Comparison> {
+    tauri::async_runtime::spawn_blocking(move || nimble_core::diff::compare(&a, &b, &options))
+        .await
+        .map_err(err)
+}
+
+/// Compares two files on disk and keeps their text for `compare_lines`.
+#[tauri::command]
+async fn compare_files(
+    cache: State<'_, CompareCache>,
+    a: String,
+    b: String,
+    options: nimble_core::diff::DiffOptions,
+) -> CmdResult<FileComparison> {
+    let (fa, fb) = tauri::async_runtime::spawn_blocking(move || -> nimble_core::Result<_> {
+        Ok((
+            fileio::read(Path::new(&a), Eol::Lf)?,
+            fileio::read(Path::new(&b), Eol::Lf)?,
+        ))
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)?;
+    let (eol_a, eol_b) = (fa.eol, fb.eol);
+    let (ta, tb) = (fa.text, fb.text);
+    let opts = options.clone();
+    let (ta2, tb2) = (ta.clone(), tb.clone());
+    let comparison =
+        tauri::async_runtime::spawn_blocking(move || nimble_core::diff::compare(&ta2, &tb2, &opts))
+            .await
+            .map_err(err)?;
+    let mut guard = cache.0.lock().unwrap();
+    guard.0 += 1;
+    let id = guard.0;
+    // Keep only the latest few comparisons.
+    if guard.1.len() >= 4 {
+        let oldest = *guard.1.keys().min().unwrap();
+        guard.1.remove(&oldest);
+    }
+    guard.1.insert(id, (ta, tb));
+    Ok(FileComparison {
+        id,
+        comparison,
+        eol_a,
+        eol_b,
+    })
+}
+
+/// Lines `[start, start + len)` of side `a` or `b` of a finished file comparison.
+#[tauri::command]
+async fn compare_lines(
+    cache: State<'_, CompareCache>,
+    id: u64,
+    side: String,
+    start: usize,
+    len: usize,
+) -> CmdResult<Vec<String>> {
+    let guard = cache.0.lock().unwrap();
+    let (a, b) = guard.1.get(&id).ok_or("comparison expired")?;
+    Ok(nimble_core::diff::slice_lines(
+        if side == "a" { a } else { b },
+        start,
+        len.min(2000),
+    ))
+}
+
+#[tauri::command]
+fn compare_close(cache: State<'_, CompareCache>, id: u64) {
+    cache.0.lock().unwrap().1.remove(&id);
+}
+
 // ---- user-defined languages ------------------------------------------------
 
 /// Validates a JSON or TOML definition and returns it normalised as JSON.
@@ -402,6 +497,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Pending::default())
         .manage(PendingUpdate::default())
+        .manage(CompareCache::default())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             app.manage(SessionStore::new(dir).map_err(|e| e.to_string())?);
@@ -450,6 +546,10 @@ pub fn run() {
             serialize_language_definition,
             language_template,
             list_encodings,
+            compare_text,
+            compare_files,
+            compare_lines,
+            compare_close,
             replace_in_folder,
             take_pending_paths,
             set_locale,

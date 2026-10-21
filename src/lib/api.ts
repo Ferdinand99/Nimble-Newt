@@ -103,7 +103,39 @@ export interface UpdateFailure {
 }
 export type DownloadEvent = { event: "progress"; chunk: number; total: number | null } | { event: "finished" };
 
+export interface Hunk {
+  kind: "added" | "removed" | "changed";
+  aStart: number;
+  aLen: number;
+  bStart: number;
+  bLen: number;
+}
+export interface Comparison {
+  hunks: Hunk[];
+  aLines: number;
+  bLines: number;
+  addedLines: number;
+  removedLines: number;
+  identical: boolean;
+  timedOut: boolean;
+}
+export interface DiffOptions {
+  whitespace: "exact" | "trailing" | "edges" | "all";
+  ignoreCase: boolean;
+  timeoutMs: number;
+}
+export interface FileComparison {
+  id: number;
+  comparison: Comparison;
+  eolA: Eol;
+  eolB: Eol;
+}
+
 export const api = {
+  compareText: (a: string, b: string, options: DiffOptions) => invoke<Comparison>("compare_text", { a, b, options }),
+  compareFiles: (a: string, b: string, options: DiffOptions) => invoke<FileComparison>("compare_files", { a, b, options }),
+  compareLines: (id: number, side: "a" | "b", start: number, len: number) => invoke<string[]>("compare_lines", { id, side, start, len }),
+  compareClose: (id: number) => invoke<void>("compare_close", { id }),
   openFile: (path: string, defaultEol: Eol) => invoke<OpenedFile>("open_file", { path, defaultEol }),
   openFileAs: (path: string, encoding: Encoding, defaultEol: Eol) => invoke<OpenedFile>("open_file_as", { path, encoding, defaultEol }),
   saveFile: (path: string, text: string, encoding: Encoding, eol: Eol, expectedMtimeMs: number | null) => invoke<WriteResult>("save_file", { path, text, encoding, eol, expectedMtimeMs }),

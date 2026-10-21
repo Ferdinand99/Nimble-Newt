@@ -408,6 +408,26 @@
   },
   {
    "id": "view.completion"
+  },
+  {
+   "id": "compare.withTab"
+  },
+  {
+   "id": "compare.withFile"
+  },
+  {
+   "id": "compare.files"
+  },
+  {
+   "id": "compare.close"
+  },
+  {
+   "id": "compare.next",
+   "accel": "F7"
+  },
+  {
+   "id": "compare.prev",
+   "accel": "Shift+F7"
   }
  ],
  "menu": [
@@ -590,6 +610,23 @@
     "macro.save",
     "macro.runSaved",
     "macro.deleteSaved"
+   ]
+  },
+  {
+   "id": "tools",
+   "items": [
+    {
+     "id": "tools.compare",
+     "items": [
+      "compare.withTab",
+      "compare.withFile",
+      "compare.files",
+      "-",
+      "compare.next",
+      "compare.prev",
+      "compare.close"
+     ]
+    }
    ]
   },
   {

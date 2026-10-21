@@ -143,6 +143,8 @@ export class Workspace {
   }
 
   private onUpdate(u: ViewUpdate): void {
+    // Secondary editors (comparison panes) share the extension set but are not the active tab.
+    if (u.view !== this.view) return;
     const doc = this.active;
     if (!doc) return;
     if (u.docChanged) {
@@ -283,7 +285,8 @@ export class Workspace {
     d.scrollLeft = this.view.scrollDOM.scrollLeft;
   }
 
-  private async ensureLoaded(doc: Doc): Promise<boolean> {
+  /** Makes sure a lazily restored tab has its editor state (reads the file when needed). */
+  async ensureLoaded(doc: Doc): Promise<boolean> {
     if (doc.state) return true;
     if (!doc.path) return false;
     try {
@@ -406,6 +409,21 @@ export class Workspace {
     if (!d || d.path || d.langManual) return;
     const id = guessLanguage(this.textOf(d));
     if (id && id !== d.langId) await this.setLanguage(d, id, false);
+  }
+
+  /** The language extension of a tab (loaded on demand), for editors other than the main one. */
+  languageExtensionFor(doc: Doc): Promise<Extension> {
+    return loadLanguage(getLanguage(doc.langId));
+  }
+
+  /** Replaces the whole content of a tab (one undoable change). No-op when the text is the same. */
+  applyText(doc: Doc, text: string): void {
+    const st = this.stateOf(doc);
+    if (!st || st.doc.toString() === text) return;
+    this.updateState(doc, { changes: { from: 0, to: st.doc.length, insert: text }, userEvent: "input.compare" });
+    this.emit("tabs");
+    this.updateWindowTitle();
+    this.persist();
   }
 
   async ensureDocLanguage(doc: Doc): Promise<void> {

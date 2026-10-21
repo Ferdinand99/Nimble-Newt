@@ -1,0 +1,159 @@
+.compare {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.compare-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bar);
+  font-size: 0.8125rem;
+}
+.compare-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.compare-stats {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.compare-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.compare-body .cm-mergeView {
+  height: 100%;
+}
+.compare-body .cm-mergeViewEditors {
+  height: 100%;
+}
+.compare-body .cm-mergeViewEditor {
+  min-width: 0;
+}
+.compare .cm-editor {
+  height: 100%;
+  background: var(--bg);
+  font-size: var(--editor-size);
+}
+.compare .cm-scroller {
+  font-family: var(--editor-font);
+  line-height: 1.55;
+}
+.compare .cm-gutters {
+  border: 0;
+  background: var(--bg);
+  color: var(--muted);
+}
+.compare .cm-changedLine {
+  background: color-mix(in srgb, var(--info) 10%, transparent);
+}
+.compare .cm-deletedChunk {
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
+}
+.compare .cm-deletedChunk .cm-deletedLine,
+.compare .cm-deletedLine {
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+}
+.compare .cm-insertedLine {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+.compare .cm-changedText {
+  background: color-mix(in srgb, var(--info) 30%, transparent);
+  border-radius: 2px;
+}
+.compare .cm-deletedText {
+  background: color-mix(in srgb, var(--bad) 32%, transparent);
+}
+.compare .cm-insertedText {
+  background: color-mix(in srgb, var(--ok) 32%, transparent);
+}
+.compare .cm-merge-revert button {
+  border: 0;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.compare .cm-collapsedLines {
+  background: var(--fill);
+  color: var(--muted);
+  cursor: pointer;
+}
+.hunks {
+  display: grid;
+  grid-template-columns: minmax(180px, 34%) minmax(0, 1fr);
+  height: 100%;
+}
+.hunk-list {
+  margin: 0;
+  padding: 6px;
+  overflow: auto;
+  list-style: none;
+  border-inline-end: 1px solid var(--line);
+}
+.hunk-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font-size: 0.8125rem;
+  text-align: start;
+}
+.hunk-item:hover {
+  background: var(--hover);
+}
+.hunk-item[aria-current="true"] {
+  background: var(--brand-fill);
+}
+.hunk-kind {
+  font-weight: 600;
+}
+.hunk-kind.added {
+  color: var(--ok-text);
+}
+.hunk-kind.removed {
+  color: var(--bad-text);
+}
+.hunk-kind.changed {
+  color: var(--info-text);
+}
+.hunk-preview {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  min-width: 0;
+  overflow: hidden;
+}
+.hunk-side {
+  min-height: 0;
+  margin: 0;
+  padding: 8px 12px;
+  overflow: auto;
+  font: 0.75rem/1.55 var(--mono);
+  white-space: pre;
+}
+.hunk-side + .hunk-side {
+  border-top: 1px solid var(--line);
+}
+.hunk-side-title {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font: 600 0.6875rem var(--font);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
