@@ -47,7 +47,7 @@
   "plugins": {
     "updater": {
       "endpoints": ["https://github.com/Ferdinand99/Nimble-Newt/releases/latest/download/latest.json"],
-      "pubkey": "REPLACE_WITH_PUBLIC_KEY_SEE_docs/updates.md",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEExMTA5OEI0NjQyRTNDMkIKUldRclBDNWt0SmdRb1N0R01tTzVxcUk1ZUxzMDJRdnM1K0RGVDg2Yi9xbXUzS2lJUDhMYi9nWEwK",
       "windows": { "installMode": "passive" }
     }
   }
