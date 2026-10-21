@@ -125,18 +125,23 @@ fn command_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"^[A-Za-z][A-Za-z0-9_-]{0,39}$").expect("static regex"))
 }
 
+/// Names Windows reserves for devices, with or without an extension ("con", "NUL.txt", "COM1").
+fn is_windows_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or("").to_ascii_lowercase();
+    let stem = stem.trim_end_matches(' ');
+    matches!(stem, "con" | "prn" | "aux" | "nul" | "conin$" | "conout$")
+        || ((stem.starts_with("com") || stem.starts_with("lpt"))
+            && stem.len() == 4
+            && matches!(stem.as_bytes()[3], b'1'..=b'9'))
+}
+
 fn check_id(id: &str) -> Result<()> {
     if id.chars().count() > 64 || !id_re().is_match(id) {
         return bad("id must look like \"com.example.name\" (lowercase letters, digits, dots and dashes, at most 64 characters)");
     }
     // Names that Windows reserves, even with an extension, cannot be folder names.
     let first = id.split('.').next().unwrap_or("");
-    let reserved = matches!(first, "con" | "prn" | "aux" | "nul")
-        || ((first.starts_with("com") || first.starts_with("lpt"))
-            && first.len() == 4
-            && first.as_bytes()[3].is_ascii_digit()
-            && first.as_bytes()[3] != b'0');
-    if reserved {
+    if is_windows_device_name(first) {
         return bad(format!(
             "id must not start with the reserved name \"{first}\""
         ));
@@ -466,6 +471,13 @@ fn check_entry_name(name: &str) -> Result<Vec<&str>> {
     {
         return fail();
     }
+    // Windows would silently rename or reject these: device names, and names ending in a dot or a space.
+    if parts
+        .iter()
+        .any(|p| is_windows_device_name(p) || p.ends_with('.') || p.ends_with(' '))
+    {
+        return fail();
+    }
     Ok(parts)
 }
 
@@ -650,6 +662,7 @@ struct State {
     disabled: BTreeSet<String>,
 }
 
+#[derive(Clone)]
 pub struct ExtensionStore {
     root: PathBuf,
 }
@@ -831,9 +844,21 @@ impl ExtensionStore {
         Self::staged_manifest(&staged.0, app_version)
     }
 
-    fn install(&self, src: &Path, app_version: &str, allow_same: bool) -> Result<Manifest> {
+    fn install(
+        &self,
+        src: &Path,
+        app_version: &str,
+        allow_same: bool,
+        expected: Option<&Manifest>,
+    ) -> Result<Manifest> {
         let staged = self.stage(src)?;
         let manifest = Self::staged_manifest(&staged.0, app_version)?;
+        // The package is read once, into the staging folder; what the user approved must be what is installed.
+        if let Some(e) = expected {
+            if e != &manifest {
+                return bad("the extension changed after you reviewed it; open it again to review the new version");
+            }
+        }
         let target = self.ext_dir(&manifest.id)?;
         let mut backup = None;
         if target.exists() {
@@ -874,17 +899,19 @@ impl ExtensionStore {
     }
 
     /// Installs (or updates) an extension from a folder. A same-version reinstall needs
-    /// `allow_same`; downgrades are always refused. The enabled state is kept.
+    /// `allow_same`; downgrades are always refused. The enabled state is kept. With `expected` (the manifest
+    /// the user approved after `inspect`) the install is refused if the package no longer has exactly that manifest.
     pub fn install_from_dir(
         &self,
         src: &Path,
         app_version: &str,
         allow_same: bool,
+        expected: Option<&Manifest>,
     ) -> Result<Manifest> {
         if !std::fs::symlink_metadata(src)?.is_dir() {
             return bad("the source is not a folder");
         }
-        self.install(src, app_version, allow_same)
+        self.install(src, app_version, allow_same, expected)
     }
 
     /// Installs (or updates) an extension from a `.nnext` zip; see [`install_from_dir`](Self::install_from_dir).
@@ -893,11 +920,12 @@ impl ExtensionStore {
         zip_path: &Path,
         app_version: &str,
         allow_same: bool,
+        expected: Option<&Manifest>,
     ) -> Result<Manifest> {
         if !std::fs::symlink_metadata(zip_path)?.is_file() {
             return bad("the package is not a file");
         }
-        self.install(zip_path, app_version, allow_same)
+        self.install(zip_path, app_version, allow_same, expected)
     }
 
     pub fn remove(&self, id: &str) -> Result<()> {
@@ -1088,7 +1116,7 @@ mod tests {
 
     fn install_default(s: &ExtensionStore, t: &TD) -> Manifest {
         let d = make_dir(t.path(), "com.example.hello", "1.0.0");
-        s.install_from_dir(&d, APP, false).unwrap()
+        s.install_from_dir(&d, APP, false, None).unwrap()
     }
 
     // -- manifest -----------------------------------------------------------------------------
@@ -1397,7 +1425,10 @@ mod tests {
         let (t, s) = store();
         let d = make_dir(t.path(), "com.example.hello", "1.0.0");
         fs::remove_file(d.join("main.js")).unwrap();
-        let e = s.install_from_dir(&d, APP, false).unwrap_err().to_string();
+        let e = s
+            .install_from_dir(&d, APP, false, None)
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("main"), "{e}");
         assert!(store_is_empty(&s));
     }
@@ -1407,9 +1438,9 @@ mod tests {
         let (t, s) = store();
         let d = t.path().join("empty");
         fs::create_dir_all(&d).unwrap();
-        assert!(s.install_from_dir(&d, APP, false).is_err());
+        assert!(s.install_from_dir(&d, APP, false, None).is_err());
         fs::write(d.join("manifest.json"), "{}").unwrap();
-        assert!(s.install_from_dir(&d, APP, false).is_err());
+        assert!(s.install_from_dir(&d, APP, false, None).is_err());
         assert!(store_is_empty(&s));
     }
 
@@ -1417,7 +1448,7 @@ mod tests {
     fn install_dir_requires_new_enough_app() {
         let (t, s) = store();
         let d = make_dir(t.path(), "com.example.hello", "1.0.0");
-        assert!(s.install_from_dir(&d, "0.1.0", false).is_err());
+        assert!(s.install_from_dir(&d, "0.1.0", false, None).is_err());
         assert!(store_is_empty(&s));
     }
 
@@ -1427,7 +1458,10 @@ mod tests {
         let (t, s) = store();
         let d = make_dir(t.path(), "com.example.hello", "1.0.0");
         std::os::unix::fs::symlink("/etc/passwd", d.join("link.txt")).unwrap();
-        let e = s.install_from_dir(&d, APP, false).unwrap_err().to_string();
+        let e = s
+            .install_from_dir(&d, APP, false, None)
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("symbolic"), "{e}");
         assert!(store_is_empty(&s));
     }
@@ -1439,7 +1473,7 @@ mod tests {
         for i in 0..200 {
             fs::write(d.join(format!("f{i}.txt")), "x").unwrap();
         }
-        assert!(s.install_from_dir(&d, APP, false).is_err());
+        assert!(s.install_from_dir(&d, APP, false, None).is_err());
         assert!(store_is_empty(&s));
     }
 
@@ -1448,7 +1482,7 @@ mod tests {
         let (t, s) = store();
         let d = make_dir(t.path(), "com.example.hello", "1.0.0");
         fs::write(d.join("big.bin"), vec![1u8; 5 * 1024 * 1024 + 10]).unwrap();
-        assert!(s.install_from_dir(&d, APP, false).is_err());
+        assert!(s.install_from_dir(&d, APP, false, None).is_err());
         assert!(store_is_empty(&s));
     }
 
@@ -1457,7 +1491,7 @@ mod tests {
         let (t, s) = store();
         let d = make_dir(t.path(), "com.example.hello", "1.0.0");
         fs::write(d.join(".storage.json"), r#"{"k":"planted"}"#).unwrap();
-        s.install_from_dir(&d, APP, false).unwrap();
+        s.install_from_dir(&d, APP, false, None).unwrap();
         assert_eq!(s.storage_get("com.example.hello", "k").unwrap(), None);
     }
 
@@ -1468,7 +1502,7 @@ mod tests {
         let (t, s) = store();
         let z = t.path().join("a.nnext");
         zip_std(&z, "");
-        s.install_from_zip(&z, APP, false).unwrap();
+        s.install_from_zip(&z, APP, false, None).unwrap();
         assert!(s.read_main("com.example.hello").unwrap().contains("js"));
     }
 
@@ -1477,7 +1511,7 @@ mod tests {
         let (t, s) = store();
         let z = t.path().join("a.nnext");
         zip_std(&z, "hello/");
-        s.install_from_zip(&z, APP, false).unwrap();
+        s.install_from_zip(&z, APP, false, None).unwrap();
         assert!(s.read_main("com.example.hello").is_ok());
         assert!(!s.root().join("com.example.hello").join("hello").exists());
     }
@@ -1495,7 +1529,7 @@ mod tests {
         w.start_file("__MACOSX/hello/._main.js", opts()).unwrap();
         w.write_all(b"junk").unwrap();
         w.finish().unwrap();
-        s.install_from_zip(&z, APP, false).unwrap();
+        s.install_from_zip(&z, APP, false, None).unwrap();
     }
 
     #[test]
@@ -1503,7 +1537,7 @@ mod tests {
         let (t, s) = store();
         let z = t.path().join("a.nnext");
         build_zip(&z, &[("main.js", b"x".to_vec())]);
-        assert!(s.install_from_zip(&z, APP, false).is_err());
+        assert!(s.install_from_zip(&z, APP, false, None).is_err());
         build_zip(
             &z,
             &[
@@ -1512,7 +1546,7 @@ mod tests {
                 ("b/other.txt", b"x".to_vec()),
             ],
         );
-        assert!(s.install_from_zip(&z, APP, false).is_err());
+        assert!(s.install_from_zip(&z, APP, false, None).is_err());
         assert!(store_is_empty(&s));
     }
 
@@ -1521,7 +1555,7 @@ mod tests {
         let (t, s) = store();
         let z = t.path().join("a.nnext");
         fs::write(&z, b"this is not a zip").unwrap();
-        assert!(s.install_from_zip(&z, APP, false).is_err());
+        assert!(s.install_from_zip(&z, APP, false, None).is_err());
         assert!(store_is_empty(&s));
     }
 
@@ -1529,7 +1563,10 @@ mod tests {
         let (t, s) = store();
         let z = t.path().join("bad.nnext");
         build_zip(&z, files);
-        let e = s.install_from_zip(&z, APP, false).unwrap_err().to_string();
+        let e = s
+            .install_from_zip(&z, APP, false, None)
+            .unwrap_err()
+            .to_string();
         assert!(e.contains(needle), "{e}");
         assert!(store_is_empty(&s), "store must stay empty");
         assert!(!t.path().join("evil").exists());
@@ -1606,7 +1643,10 @@ mod tests {
         w.write_all(b"x").unwrap();
         w.add_symlink("link", "/etc/passwd", opts()).unwrap();
         w.finish().unwrap();
-        let e = s.install_from_zip(&z, APP, false).unwrap_err().to_string();
+        let e = s
+            .install_from_zip(&z, APP, false, None)
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("symbolic"), "{e}");
         assert!(store_is_empty(&s));
     }
@@ -1635,7 +1675,7 @@ mod tests {
         let refs: Vec<(&str, Vec<u8>)> =
             files.iter().map(|(n, d)| (n.as_str(), d.clone())).collect();
         build_zip(&z, &refs);
-        s.install_from_zip(&z, APP, false).unwrap();
+        s.install_from_zip(&z, APP, false, None).unwrap();
     }
 
     #[test]
@@ -1693,12 +1733,12 @@ mod tests {
                 ("main.js", vec![b'a'; 6 * 1024 * 1024]),
             ],
         );
-        assert!(s.install_from_zip(&z, APP, false).is_err());
+        assert!(s.install_from_zip(&z, APP, false, None).is_err());
         assert!(store_is_empty(&s));
     }
 
     #[test]
-    fn zip_duplicate_entries_rejected() {
+    fn zip_written_twice_still_installs() {
         let (t, s) = store();
         let z = t.path().join("a.nnext");
         build_zip(&z, &[("manifest.json", m()), ("main.js", b"1".to_vec())]);
@@ -1709,7 +1749,7 @@ mod tests {
         w.start_file("main.js", opts()).unwrap();
         w.write_all(b"1").unwrap();
         w.finish().unwrap();
-        s.install_from_zip(&z, APP, false).unwrap();
+        s.install_from_zip(&z, APP, false, None).unwrap();
     }
 
     // -- updates ------------------------------------------------------------------------------
@@ -1720,17 +1760,17 @@ mod tests {
         install_default(&s, &t);
         let same = make_dir(t.path(), "com.example.hello", "1.0.0");
         let e = s
-            .install_from_dir(&same, APP, false)
+            .install_from_dir(&same, APP, false, None)
             .unwrap_err()
             .to_string();
         assert!(e.contains("already installed"), "{e}");
-        s.install_from_dir(&same, APP, true).unwrap();
+        s.install_from_dir(&same, APP, true, None).unwrap();
 
         let up = make_dir(t.path(), "com.example.hello", "1.2.0");
-        s.install_from_dir(&up, APP, false).unwrap();
+        s.install_from_dir(&up, APP, false, None).unwrap();
         let down = make_dir(t.path(), "com.example.hello", "1.1.0");
         let e = s
-            .install_from_dir(&down, APP, true)
+            .install_from_dir(&down, APP, true, None)
             .unwrap_err()
             .to_string();
         assert!(e.contains("downgrade"), "{e}");
@@ -1755,7 +1795,7 @@ mod tests {
             .unwrap();
         let up = make_dir(t.path(), "com.example.hello", "2.0.0");
         fs::write(up.join("main.js"), "// v2").unwrap();
-        s.install_from_dir(&up, APP, false).unwrap();
+        s.install_from_dir(&up, APP, false, None).unwrap();
         let e = s.get("com.example.hello").unwrap().unwrap();
         assert_eq!(e.manifest.version, "2.0.0");
         assert!(!e.enabled);
@@ -1772,7 +1812,7 @@ mod tests {
         install_default(&s, &t);
         let up = make_dir(t.path(), "com.example.hello", "2.0.0");
         fs::remove_file(up.join("main.js")).unwrap();
-        assert!(s.install_from_dir(&up, APP, false).is_err());
+        assert!(s.install_from_dir(&up, APP, false, None).is_err());
         assert_eq!(
             s.get("com.example.hello")
                 .unwrap()
@@ -1921,7 +1961,7 @@ mod tests {
         v["main"] = json!("../main.js");
         fs::write(d.join("manifest.json"), v.to_string()).unwrap();
         fs::write(t.path().join("main.js"), "x").unwrap();
-        assert!(s.install_from_dir(&d, APP, false).is_err());
+        assert!(s.install_from_dir(&d, APP, false, None).is_err());
         assert!(store_is_empty(&s));
     }
 
@@ -2032,8 +2072,8 @@ mod tests {
         let (t, s) = store();
         let a = make_dir(t.path(), "com.example.aaa", "1.0.0");
         let b = make_dir(t.path(), "com.example.bbb", "1.0.0");
-        s.install_from_dir(&a, APP, false).unwrap();
-        s.install_from_dir(&b, APP, false).unwrap();
+        s.install_from_dir(&a, APP, false, None).unwrap();
+        s.install_from_dir(&b, APP, false, None).unwrap();
         s.storage_set("com.example.aaa", "k", &json!("A")).unwrap();
         s.storage_set("com.example.bbb", "k", &json!("B")).unwrap();
         assert_eq!(
@@ -2080,7 +2120,7 @@ mod tests {
         fs::write(d.join(".storage.json"), "{}").unwrap();
         let z = t.path().join("out.nnext");
         pack_zip(&d, &z).unwrap();
-        s.install_from_zip(&z, APP, false).unwrap();
+        s.install_from_zip(&z, APP, false, None).unwrap();
         assert!(s.root().join("com.example.hello/lib/util.js").is_file());
         assert!(!s.root().join("com.example.hello/.storage.json").exists());
     }
@@ -2106,5 +2146,100 @@ mod tests {
         let d = make_dir(t.path(), "com.example.hello", "1.0.0");
         std::os::unix::fs::symlink("/etc/passwd", d.join("l")).unwrap();
         assert!(pack_zip(&d, &t.path().join("o.nnext")).is_err());
+    }
+
+    // -- approved manifest and Windows names ---------------------------------------------------
+
+    #[test]
+    fn install_requires_the_manifest_the_user_approved() {
+        let (t, s) = store();
+        let d = make_dir(t.path(), "com.example.hello", "1.0.0");
+        let approved = s.inspect(&d, APP).unwrap();
+        // The folder changes between the review and the install (a new permission appears).
+        let mut m = manifest_json();
+        m["permissions"] = json!(["editor.read", "editor.write", "clipboard.write", "ui"]);
+        fs::write(d.join("manifest.json"), m.to_string()).unwrap();
+        let e = s
+            .install_from_dir(&d, APP, false, Some(&approved))
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("changed after you reviewed"), "{e}");
+        assert!(s.get("com.example.hello").unwrap().is_none());
+        // Approving what is actually there works.
+        let now = s.inspect(&d, APP).unwrap();
+        s.install_from_dir(&d, APP, false, Some(&now)).unwrap();
+        assert!(s.get("com.example.hello").unwrap().is_some());
+    }
+
+    #[test]
+    fn zip_install_checks_the_approved_manifest_too() {
+        let (t, s) = store();
+        let z = t.path().join("a.nnext");
+        build_zip(&z, &[("manifest.json", m()), ("main.js", b"1".to_vec())]);
+        let mut other = s.inspect(&z, APP).unwrap();
+        other.name = "Something else".into();
+        assert!(s.install_from_zip(&z, APP, false, Some(&other)).is_err());
+        assert!(store_is_empty_except_tmp(&s));
+    }
+
+    fn store_is_empty_except_tmp(s: &ExtensionStore) -> bool {
+        s.list().0.is_empty()
+    }
+
+    #[test]
+    fn windows_device_names_and_trailing_dots_are_refused_in_packages() {
+        for bad_name in [
+            "con",
+            "CON.txt",
+            "nul",
+            "Aux.js",
+            "com1",
+            "LPT9.log",
+            "prn.x",
+            "assets/con.png",
+            "trailing.",
+            "space ",
+            "dir./x.js",
+        ] {
+            assert_rejected_zip(
+                &[
+                    ("manifest.json", m()),
+                    ("main.js", b"x".to_vec()),
+                    (bad_name, b"x".to_vec()),
+                ],
+                "unsafe",
+            );
+        }
+        // Names that merely look similar are fine.
+        let (t, s) = store();
+        let z = t.path().join("ok.nnext");
+        build_zip(
+            &z,
+            &[
+                ("manifest.json", m()),
+                ("main.js", b"x".to_vec()),
+                ("console.js", b"x".to_vec()),
+                ("com0.txt", b"x".to_vec()),
+                ("com10.txt", b"x".to_vec()),
+            ],
+        );
+        s.install_from_zip(&z, APP, false, None).unwrap();
+    }
+
+    #[test]
+    fn windows_device_names_are_refused_in_folders() {
+        for name in ["NUL", "com3.txt", "name.", "name "] {
+            let (t, s) = store();
+            let d = make_dir(t.path(), "com.example.hello", "1.0.0");
+            // On Windows such files cannot even be created; elsewhere they can, and must still be refused.
+            if fs::write(d.join(name), "x").is_err() {
+                continue;
+            }
+            let e = s
+                .install_from_dir(&d, APP, false, None)
+                .unwrap_err()
+                .to_string();
+            assert!(e.contains("unsafe"), "{name}: {e}");
+        }
     }
 }

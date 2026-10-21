@@ -229,7 +229,8 @@ jobs:
         run: |
           assets=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID" --jq '.assets[].name')
           echo "$assets"
-          if ! grep -qx 'latest.json' <<< "$assets"; then
+          # latest.json.new is the leftover of an interrupted "Put the changelog into latest.json" run; that step finishes it.
+          if ! grep -qxE 'latest\.json(\.new)?' <<< "$assets"; then
             echo "::error::Release $TAG has no latest.json asset; leaving it as a draft."
             exit 1
           fi
@@ -247,18 +248,41 @@ jobs:
       # release body (the release-please changelog) so the in-app update dialog shows what is new.
       - name: Put the changelog into latest.json
         run: |
+          # Safe to run again after a failure: the new file is uploaded as latest.json.new first, so
+          # latest.json is never missing without a finished replacement next to it, and a run that finds
+          # the notes already in place does nothing.
           set -euo pipefail
           api="repos/${{ github.repository }}"
+          asset_id() { gh api "$api/releases/$RELEASE_ID" --jq ".assets[] | select(.name == \"$1\") | .id"; }
           gh api "$api/releases/$RELEASE_ID" --jq '.body // ""' > release-body.md
-          asset_id=$(gh api "$api/releases/$RELEASE_ID" --jq '.assets[] | select(.name == "latest.json") | .id')
-          gh api "$api/releases/assets/$asset_id" -H "Accept: application/octet-stream" > latest.json
+
+          # Finish an interrupted earlier run first.
+          leftover=$(asset_id latest.json.new)
+          if [ -n "$leftover" ]; then
+            old=$(asset_id latest.json)
+            [ -z "$old" ] || gh api -X DELETE "$api/releases/assets/$old"
+            gh api -X PATCH "$api/releases/assets/$leftover" -f name=latest.json > /dev/null
+            echo "Finished an interrupted update of latest.json."
+          fi
+
+          id=$(asset_id latest.json)
+          if [ -z "$id" ]; then
+            echo "::error::Release $TAG has no latest.json asset."
+            exit 1
+          fi
+          gh api "$api/releases/assets/$id" -H "Accept: application/octet-stream" > latest.json
           node scripts/update-notes.mjs latest.json release-body.md latest.new.json
           node -e 'const j=require("./latest.new.json"); if(!j.notes){console.error("::error::latest.json would still have empty notes"); process.exit(1)}'
-          gh api -X DELETE "$api/releases/assets/$asset_id"
-          curl -fsS -X POST \
+          if node -e 'process.exit(require("./latest.json").notes === require("./latest.new.json").notes ? 0 : 1)'; then
+            echo "latest.json already carries the changelog."
+            exit 0
+          fi
+          new_id=$(curl -fsS -X POST \
             -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/json" \
             --data-binary @latest.new.json \
-            "https://uploads.github.com/$api/releases/$RELEASE_ID/assets?name=latest.json" > /dev/null
+            "https://uploads.github.com/$api/releases/$RELEASE_ID/assets?name=latest.json.new" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).id))')
+          gh api -X DELETE "$api/releases/assets/$id"
+          gh api -X PATCH "$api/releases/assets/$new_id" -f name=latest.json > /dev/null
           echo "latest.json now carries the changelog."
       - name: Publish release
         run: |

@@ -1,12 +1,16 @@
 /**
  * The script that defines the `nimble` API inside an extension's sandbox. It runs before the extension's own script,
  * talks to the app only through postMessage and exposes a frozen object. Written as a string because it is embedded
- * in the iframe's srcdoc.
+ * in the sandbox document.
  */
 export const BOOTSTRAP = `
 (function () {
   "use strict";
   var host = window.parent;
+  // WebRTC is not covered by CSP; removing it here is defence in depth only (see docs/extensions.md).
+  ["RTCPeerConnection", "webkitRTCPeerConnection", "RTCDataChannel", "RTCSessionDescription", "RTCIceCandidate"].forEach(function (n) {
+    try { Object.defineProperty(window, n, { value: undefined, configurable: false, writable: false }); } catch (e) {}
+  });
   var nextId = 1;
   var pending = new Map();
   var handlers = new Map();

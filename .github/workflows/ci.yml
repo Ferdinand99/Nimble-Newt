@@ -120,6 +120,55 @@ jobs:
           path: out/*
           if-no-files-found: error
 
+      # Proves that extensions run in the release build (the app CSP once blocked their inline scripts): the
+      # app runs the built-in Word Count in its sandbox and writes "ok: ..." or "failed: ..." to the file.
+      - name: Extension self-test (release build)
+        shell: bash
+        run: |
+          BIN=""
+          for c in \
+            "target/universal-apple-darwin/release/bundle/macos/Nimble Newt.app/Contents/MacOS/nimble-newt" \
+            "target/release/nimble-newt.exe" \
+            "target/release/nimble-newt"; do
+            if [ -f "$c" ]; then BIN="$c"; break; fi
+          done
+          [ -n "$BIN" ] || { echo "binary not found"; exit 1; }
+          BIN="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
+          P="$(mktemp -d)"
+          OUTFILE="$P/selftest.txt"
+          export HOME="$P/home" XDG_CONFIG_HOME="$P/home/.config" XDG_DATA_HOME="$P/home/.local/share" XDG_CACHE_HOME="$P/home/.cache"
+          mkdir -p "$HOME/.config" "$HOME/.local/share" "$HOME/.cache"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            export USERPROFILE="$(cygpath -w "$HOME")" APPDATA="$(cygpath -w "$HOME/AppData/Roaming")" LOCALAPPDATA="$(cygpath -w "$HOME/AppData/Local")"
+            mkdir -p "$HOME/AppData/Roaming" "$HOME/AppData/Local"
+            export NIMBLE_EXT_SELFTEST="$(cygpath -w "$OUTFILE")"
+          else
+            export NIMBLE_EXT_SELFTEST="$OUTFILE"
+          fi
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a "$BIN" >/dev/null 2>"$P/stderr.log" &
+          else
+            "$BIN" >/dev/null 2>"$P/stderr.log" &
+          fi
+          PID=$!
+          for _ in $(seq 1 180); do
+            [ -s "$OUTFILE" ] && break
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 0.5
+          done
+          sleep 0.3
+          kill "$PID" 2>/dev/null || true
+          pkill -f nimble-newt 2>/dev/null || true
+          [ "$RUNNER_OS" = "Windows" ] && taskkill //F //IM nimble-newt.exe >/dev/null 2>&1 || true
+          if [ -s "$OUTFILE" ] && grep -q '^ok:' "$OUTFILE"; then
+            echo "Extension self-test passed: $(cat "$OUTFILE")"
+            echo "Extension self-test: $(cat "$OUTFILE")" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          else
+            echo "Extension self-test FAILED: $(cat "$OUTFILE" 2>/dev/null || echo 'no result written')"
+            head -n 30 "$P/stderr.log"
+            exit 1
+          fi
+
       - name: Startup and size report
         continue-on-error: true
         env:

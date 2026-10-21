@@ -2,6 +2,7 @@
 //! single-instance forwarding and the updater.
 
 mod menu;
+mod sandbox;
 
 use nimble_core::encoding::TextEncoding;
 use nimble_core::eol::Eol;
@@ -629,33 +630,50 @@ fn ext_install_path(
 ) -> nimble_core::Result<nimble_core::extensions::Manifest> {
     let p = std::path::Path::new(path);
     if p.is_dir() {
-        store.install_from_dir(p, env!("CARGO_PKG_VERSION"), allow_same)
+        store.install_from_dir(p, env!("CARGO_PKG_VERSION"), allow_same, Some(expected))
     } else {
-        store.install_from_zip(p, env!("CARGO_PKG_VERSION"), allow_same)
+        store.install_from_zip(p, env!("CARGO_PKG_VERSION"), allow_same, Some(expected))
     }
 }
 
-#[tauri::command]
-fn ext_list(store: State<'_, nimble_core::extensions::ExtensionStore>) -> ExtListing {
-    let (extensions, problems): ExtList = store.list();
-    ExtListing {
-        extensions,
-        problems,
-    }
+/// Reading, unpacking and validating packages touches the disk, so these commands run off the UI thread.
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> CmdResult<T> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(err)
 }
 
 #[tauri::command]
-fn ext_inspect(
+async fn ext_list(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+) -> CmdResult<ExtListing> {
+    let store = store.inner().clone();
+    blocking(move || {
+        let (extensions, problems): ExtList = store.list();
+        ExtListing {
+            extensions,
+            problems,
+        }
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ext_inspect(
     store: State<'_, nimble_core::extensions::ExtensionStore>,
     path: String,
 ) -> CmdResult<nimble_core::extensions::Manifest> {
-    store
-        .inspect(std::path::Path::new(&path), env!("CARGO_PKG_VERSION"))
-        .map_err(err)
+    let store = store.inner().clone();
+    blocking(move || {
+        store
+            .inspect(std::path::Path::new(&path), env!("CARGO_PKG_VERSION"))
+            .map_err(err)
+    })
+    .await?
 }
 
+/// `expected` is the manifest the user approved after `ext_inspect`; the install is refused if the package
+/// no longer has exactly that manifest.
 #[tauri::command]
-fn ext_install(
+async fn ext_install(
     store: State<'_, nimble_core::extensions::ExtensionStore>,
     path: String,
     allow_same: bool,
@@ -716,6 +734,16 @@ fn ext_storage_remove(
     store.storage_remove(&id, &key).map_err(err)
 }
 
+#[tauri::command]
+fn sandbox_stage(docs: State<'_, sandbox::SandboxDocs>, html: String) -> String {
+    docs.stage(html)
+}
+
+#[tauri::command]
+fn sandbox_release(docs: State<'_, sandbox::SandboxDocs>, id: String) {
+    docs.release(&id);
+}
+
 #[derive(Default)]
 struct MenuExtras(Mutex<Vec<menu::Extra>>);
 
@@ -737,7 +765,7 @@ fn set_extension_menu(
 /// (process `run()` to usable window) plus the part spent in the page (`frontend_ms`).
 /// With `NIMBLE_STARTUP_REPORT=<file>` it writes the numbers there and quits.
 #[tauri::command]
-fn app_ready(app: AppHandle, frontend_ms: f64, stages: serde_json::Value) {
+fn app_ready(app: AppHandle, frontend_ms: f64, stages: serde_json::Value) -> bool {
     let ms = START
         .get()
         .map(|s| s.elapsed().as_secs_f64() * 1000.0)
@@ -745,7 +773,10 @@ fn app_ready(app: AppHandle, frontend_ms: f64, stages: serde_json::Value) {
     eprintln!(
         "nimble-newt: ready in {ms:.0} ms (page load to ready: {frontend_ms:.0} ms) {stages}"
     );
-    if let Ok(path) = std::env::var("NIMBLE_STARTUP_REPORT") {
+    // With `NIMBLE_EXT_SELFTEST=<file>` the page runs the built-in Word Count extension and reports back through
+    // `selftest_done`, so CI can prove extensions work in a release build; the start-up report waits for that.
+    let selftest = std::env::var_os("NIMBLE_EXT_SELFTEST").is_some();
+    if let (false, Ok(path)) = (selftest, std::env::var("NIMBLE_STARTUP_REPORT")) {
         let _ = std::fs::write(
             path,
             format!(
@@ -782,6 +813,19 @@ fn failure(message: impl std::fmt::Display) -> UpdateFailure {
         kind: update::classify_error(&message),
         message,
     }
+    selftest
+}
+
+/// Result of the extension self-test (see `app_ready`): writes `ok` or the failure message and exits.
+#[tauri::command]
+fn selftest_done(app: AppHandle, ok: bool, message: String) {
+    if let Some(path) = std::env::var_os("NIMBLE_EXT_SELFTEST") {
+        let _ = std::fs::write(
+            path,
+            format!("{}: {message}\n", if ok { "ok" } else { "failed" }),
+        );
+    }
+    app.exit(if ok { 0 } else { 1 });
 }
 
 fn updater_key_configured(app: &AppHandle) -> bool {
@@ -908,6 +952,12 @@ pub fn run() {
         .manage(CompareCache::default())
         .manage(LargeFiles::default())
         .manage(MenuExtras::default())
+        .manage(sandbox::SandboxDocs::default())
+        .register_uri_scheme_protocol(sandbox::SCHEME, |ctx, request| {
+            ctx.app_handle()
+                .state::<sandbox::SandboxDocs>()
+                .respond(request.uri().path())
+        })
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             app.manage(nimble_core::extensions::ExtensionStore::new(
@@ -980,6 +1030,8 @@ pub fn run() {
             take_pending_paths,
             set_locale,
             set_extension_menu,
+            sandbox_stage,
+            sandbox_release,
             ext_list,
             ext_inspect,
             ext_install,
@@ -990,6 +1042,7 @@ pub fn run() {
             ext_storage_set,
             ext_storage_remove,
             app_ready,
+            selftest_done,
             restart_app,
             check_update,
             install_update,

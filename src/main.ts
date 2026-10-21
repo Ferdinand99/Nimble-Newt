@@ -82,7 +82,12 @@ async function boot(): Promise<void> {
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
       mark("painted");
-      void api.appReady(stages);
+      void api
+        .appReady(stages)
+        .then((selftest) => {
+          if (selftest) return import("./ext/host").then((m) => m.selfTest());
+        })
+        .catch(() => {});
     }),
   );
 

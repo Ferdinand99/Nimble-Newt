@@ -18,12 +18,22 @@ Extensions are written by third parties and may be hostile or buggy. The protect
 
 1. **No native code.** The Rust side only parses manifests and reads files from the extension's own folder. Nothing in
    an extension package is ever executed by the OS. (This rules out Notepad++-style DLL plugins on purpose.)
-2. **A sandboxed iframe per extension.** The script runs in `<iframe sandbox="allow-scripts" srcdoc=...>` without
+2. **A sandboxed iframe per extension.** The script runs in `<iframe sandbox="allow-scripts" src=...>` without
    `allow-same-origin`, so it has an opaque origin: no access to the app's DOM, storage, cookies or Tauri IPC. The
-   srcdoc starts with `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'">`.
-   The policy is enforced from parsing on and cannot be removed by script: `fetch`, XHR, WebSocket, images, fonts,
-   frames and `import()` are all blocked, so the code has no way out except `postMessage` to the host. Both WebView2
-   (Chromium) and WKWebView (WebKit) enforce `sandbox` and meta CSP.
+   document is **served by the app from its own URI scheme (`nnext`)** with the header
+   `Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'` (and the same policy as a meta tag). An
+   iframe with `srcdoc` would inherit the app's own CSP and its inline scripts would be blocked in a release build, and
+   the app CSP deliberately does not allow `'unsafe-inline'` for scripts; it only lists the scheme in `frame-src`.
+   The sandbox policy is enforced from parsing on and cannot be removed by script: `fetch`, XHR, WebSocket, images,
+   fonts, media and `import()` are all blocked, so the code has no way out except `postMessage` to the host. Both
+   WebView2 (Chromium) and WKWebView (WebKit) enforce `sandbox` and CSP. The scheme only serves documents the app
+   itself staged a moment before, under unguessable ids; everything else is a 404.
+   **Known gap: WebRTC.** Content Security Policy does not govern `RTCPeerConnection`, and the webview does not let the
+   app switch WebRTC off. The bootstrap removes the WebRTC constructors from the sandbox window as defence in depth,
+   but a script can get them back from a fresh child frame, so WebRTC is **not** reliably blocked. An extension that
+   was granted `editor.read` could therefore try to send text out through ICE/STUN/TURN traffic. This is why
+   `editor.read` is shown prominently in the consent sheet and why extensions have no marketplace in v1: only install
+   extensions you trust. Closing the gap needs a webview-level setting that Tauri does not expose today.
 3. **A small message API with permissions.** The host answers only messages from that iframe's window, validates every
    argument and checks the call against the permissions in the manifest *and* the user's consent. Unknown methods fail.
 4. **Limits.** Script size (1 MB), manifest size (16 KB), package size (5 MB, 200 files), message size (4 MB), call

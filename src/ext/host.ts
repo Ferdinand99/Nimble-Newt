@@ -117,14 +117,26 @@ function handler(rec: Rec) {
         v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: String(p.text) }, userEvent: "input.extension" });
         return null;
       case "ui.message":
-        toast(String(p.text), (p.kind as "info" | "success" | "warning" | "error") ?? "info");
+        toast(`${rec.name}: ${String(p.text)}`, (p.kind as "info" | "success" | "warning" | "error") ?? "info");
         return null;
-      case "ui.prompt":
-        return promptText(String(p.title), String(p.placeholder ?? ""), String(p.value ?? ""));
+      case "ui.prompt": {
+        // The command timeout stops while the user is typing, and the dialog says whose it is.
+        const release = rec.sandbox?.hold();
+        try {
+          return await promptText(`${rec.name}: ${String(p.title)}`, String(p.placeholder ?? ""), String(p.value ?? ""));
+        } finally {
+          release?.();
+        }
+      }
       case "ui.pick": {
         const items = (p.items as string[]).map((label, i) => ({ label, value: i }));
-        const i = await quickPick(items, String(p.title));
-        return i === null ? null : (p.items as string[])[i];
+        const release = rec.sandbox?.hold();
+        try {
+          const i = await quickPick(items, `${rec.name}: ${String(p.title)}`);
+          return i === null ? null : (p.items as string[])[i];
+        } finally {
+          release?.();
+        }
       }
       case "clipboard.writeText":
         await navigator.clipboard.writeText(String(p.text));
@@ -260,7 +272,7 @@ export async function installFrom(path: string): Promise<boolean> {
   });
   if (!yes) return false;
   try {
-    await api.extInstall(path, !!existing);
+    await api.extInstall(path, !!existing, manifest);
     existing?.sandbox?.kill();
     await initExtensions();
     toast(t("ext.installed", { name: manifest.name }), "success");
@@ -269,4 +281,27 @@ export async function installFrom(path: string): Promise<boolean> {
     toast(t("ext.invalid", { error: errorMessage(e) }), "error", 9000);
     return false;
   }
+}
+
+/** Used by CI (`NIMBLE_EXT_SELFTEST`): runs the built-in Word Count through the real sandbox and reports the result. */
+export async function selfTest(): Promise<void> {
+  let ok = false;
+  let message = "no result";
+  try {
+    if (records.size === 0) await initExtensions();
+    const view = workspace.focusedView();
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "one two three four\n" } });
+    void runExtensionCommand("ext:app.wordcount:count");
+    for (let i = 0; i < 100 && !ok; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const text = [...document.querySelectorAll(".toast")].map((e) => e.textContent ?? "").join(" | ");
+      if (/\b4 (words|ord)\b/.test(text)) {
+        ok = true;
+        message = text;
+      } else if (text) message = text;
+    }
+  } catch (e) {
+    message = errorMessage(e);
+  }
+  await api.selftestDone(ok, message);
 }

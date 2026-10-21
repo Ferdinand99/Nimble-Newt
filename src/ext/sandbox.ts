@@ -1,13 +1,18 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { api } from "../lib/api";
 import { h } from "../lib/dom";
 import { BOOTSTRAP } from "./bootstrap";
 import { buildSrcdoc, checkRequest, LIMITS, RateLimiter, type Permission } from "./protocol";
+import { TimerGroup } from "./timers";
 
 export type ApiHandler = (method: string, params: Record<string, unknown>) => Promise<unknown>;
 
 /** One running extension: a hidden sandboxed iframe plus the plumbing to talk to it. */
 export class Sandbox {
   private frame: HTMLIFrameElement | null = null;
-  private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: number }>();
+  private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; cancel: () => void }>();
+  private timers = new TimerGroup();
+  private docId: string | null = null;
   private nextId = 1;
   private limiter = new RateLimiter();
   private registered = new Set<string>();
@@ -34,18 +39,31 @@ export class Sandbox {
   start(): Promise<void> {
     if (this.ready) return this.ready;
     this.ready = new Promise<void>((resolve, reject) => {
-      const timer = window.setTimeout(() => {
+      const cancel = this.timers.add(LIMITS.startTimeoutMs, () => {
         this.kill("start-timeout");
         reject(new Error("The extension did not start in time."));
-      }, LIMITS.startTimeoutMs);
+      });
       this.readyHook = () => {
-        clearTimeout(timer);
+        cancel();
         resolve();
       };
       window.addEventListener("message", this.onMessage);
-      // sandbox without allow-same-origin: opaque origin, no access to the app, no network (CSP in srcdoc).
-      this.frame = h("iframe", { sandbox: "allow-scripts", srcdoc: buildSrcdoc(BOOTSTRAP, this.code), "aria-hidden": "true", tabIndex: -1, title: `extension ${this.extId}`, style: "display:none" });
-      document.body.append(this.frame);
+      // The document is served by the app from its own URI scheme with its own CSP (no network, only inline
+      // script); a srcdoc frame would inherit the app's stricter CSP and its scripts would never run.
+      // sandbox without allow-same-origin: opaque origin, no access to the app.
+      api
+        .sandboxStage(buildSrcdoc(BOOTSTRAP, this.code))
+        .then((id) => {
+          if (!this.ready) return void api.sandboxRelease(id).catch(() => {});
+          this.docId = id;
+          this.frame = h("iframe", { sandbox: "allow-scripts", src: convertFileSrc(id, "nnext"), "aria-hidden": "true", tabIndex: -1, title: `extension ${this.extId}`, style: "display:none" });
+          document.body.append(this.frame);
+        })
+        .catch((e) => {
+          cancel();
+          this.kill("start-failed");
+          reject(e instanceof Error ? e : new Error(String(e)));
+        });
     });
     return this.ready;
   }
@@ -65,7 +83,7 @@ export class Sandbox {
       const p = this.pending.get(data.id as number);
       if (!p) return;
       this.pending.delete(data.id as number);
-      clearTimeout(p.timer);
+      p.cancel();
       if (data.error) p.reject(new Error(String(data.error).slice(0, 300)));
       else p.resolve(data.result);
       return;
@@ -99,24 +117,33 @@ export class Sandbox {
     if (!w) return Promise.reject(new Error("The extension is not running."));
     return new Promise<void>((resolve, reject) => {
       const id = this.nextId++;
-      const timer = window.setTimeout(() => {
+      // The clock stops while a dialog opened by the extension is on screen (see `hold`).
+      const cancel = this.timers.add(LIMITS.commandTimeoutMs, () => {
         this.pending.delete(id);
         this.kill("command-timeout");
         reject(new Error("The command took too long and the extension was stopped."));
-      }, LIMITS.commandTimeoutMs);
-      this.pending.set(id, { resolve: () => resolve(), reject, timer });
+      });
+      this.pending.set(id, { resolve: () => resolve(), reject, cancel });
       w.postMessage({ id, method: "command.run", params: { command, context } }, "*");
     });
   }
 
+  /** Pauses the command timeout until the returned function is called (for dialogs waiting on the user). */
+  hold(): () => void {
+    return this.timers.hold();
+  }
+
   kill(reason = "stopped"): void {
-    if (!this.frame) return;
+    if (!this.frame && !this.ready) return;
     window.removeEventListener("message", this.onMessage);
-    this.frame.remove();
+    this.frame?.remove();
     this.frame = null;
     this.ready = null;
+    this.timers.clear();
+    if (this.docId) void api.sandboxRelease(this.docId).catch(() => {});
+    this.docId = null;
     for (const p of this.pending.values()) {
-      clearTimeout(p.timer);
+      p.cancel();
       p.reject(new Error("The extension stopped."));
     }
     this.pending.clear();
