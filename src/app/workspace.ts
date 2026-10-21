@@ -11,6 +11,7 @@ import { guessLanguage } from "../lib/guess";
 import { detectFromShebang, detectLanguage, getLanguage, type LanguageDef } from "../lib/languages";
 import { basename, detectIndent, nextUntitledName, pushRecent, type Indent } from "../lib/logic";
 import { expectedMtime, isConflict } from "../lib/saveConflict";
+import { isLossy, lossyPlan, type LossyChoice } from "../lib/saveLossy";
 import { settings } from "../lib/settings";
 import { confirmSheet, openSheet } from "../ui/dialog";
 import type { LargeViewer } from "../ui/largeView";
@@ -487,10 +488,12 @@ export class Workspace {
 
   // ---- large files -----------------------------------------------------------------
 
-  private async openLarge(doc: Doc): Promise<boolean> {
+  /** Opens `doc` in the large-file viewer (with `enc` instead of the detected encoding when given). A viewer the tab already has is replaced only once the new one opened. */
+  private async openLarge(doc: Doc, enc: Encoding | null = null): Promise<boolean> {
     try {
       await import("../ui/largeView"); // load the viewer code before it is needed synchronously
-      const opened = await api.lfOpen(doc.path!);
+      const opened = await api.lfOpen(doc.path!, enc);
+      this.disposeLarge(doc);
       doc.large = { opened, viewer: null };
       doc.encoding = opened.info.encoding;
       doc.eol = opened.info.eol;
@@ -596,9 +599,10 @@ export class Workspace {
 
   /**
    * Saves a tab. Unless `skipCheck` is set, the backend refuses to overwrite a file that changed on disk
-   * since it was opened; the user then chooses between overwriting and reloading.
+   * since it was opened; the user then chooses between overwriting and reloading. Text the encoding
+   * cannot hold is refused too, unless `allowLossy`; the user then picks UTF-8, saving anyway or cancel.
    */
-  async save(doc: Doc, skipCheck = false): Promise<boolean> {
+  async save(doc: Doc, skipCheck = false, allowLossy = false): Promise<boolean> {
     if (doc.large) {
       toast(t("large.readOnly"), "info");
       return true;
@@ -608,7 +612,7 @@ export class Workspace {
     if (!st) return true;
     const snapshot = st.doc;
     try {
-      const r = await api.saveFile(doc.path, snapshot.toString(), doc.encoding, doc.eol, expectedMtime(doc, skipCheck));
+      const r = await api.saveFile(doc.path, snapshot.toString(), doc.encoding, doc.eol, expectedMtime(doc, skipCheck), allowLossy);
       doc.savedDoc = snapshot;
       doc.savedMtime = r.mtimeMs;
       doc.forceDirty = false;
@@ -620,6 +624,7 @@ export class Workspace {
       return true;
     } catch (e) {
       if (isConflict(e)) return this.resolveSaveConflict(doc);
+      if (isLossy(e)) return this.resolveLossySave(doc, skipCheck);
       toast(t("toast.saveFailed", { name: doc.title, error: errorMessage(e) }), "error");
       return false;
     }
@@ -646,6 +651,24 @@ export class Workspace {
       }
     }
     return false;
+  }
+
+  private async resolveLossySave(doc: Doc, skipCheck: boolean): Promise<boolean> {
+    const choice = await openSheet<LossyChoice>({
+      title: t("lossy.title", { encoding: doc.encoding }),
+      alert: true,
+      body: h("p", {}, t("lossy.message", { name: doc.title, encoding: doc.encoding })),
+      dismissValue: "cancel",
+      choices: [
+        { value: "cancel", label: t("common.cancel") },
+        { value: "anyway", label: t("lossy.anyway"), kind: "danger" },
+        { value: "utf8", label: t("lossy.utf8"), kind: "primary" },
+      ],
+    });
+    const plan = lossyPlan(choice);
+    if (!plan) return false;
+    if (plan.encoding) this.setEncoding(doc, plan.encoding);
+    return this.save(doc, skipCheck, plan.allowLossy);
   }
 
   async saveAs(doc: Doc): Promise<boolean> {
@@ -741,6 +764,7 @@ export class Workspace {
 
   setEol(doc: Doc, eol: Eol): void {
     if (doc.eol === eol) return;
+    if (doc.large) return void toast(t("large.readOnly"), "info");
     doc.eol = eol;
     doc.forceDirty = true;
     this.emit("doc");
@@ -751,6 +775,7 @@ export class Workspace {
   /** "Convert to": the text stays, the next save writes it in `enc`. */
   setEncoding(doc: Doc, enc: Encoding): void {
     if (doc.encoding === enc) return;
+    if (doc.large) return void toast(t("large.readOnly"), "info");
     doc.encoding = enc;
     doc.forceDirty = true;
     this.emit("doc");
@@ -758,9 +783,17 @@ export class Workspace {
     this.persist();
   }
 
-  /** "Reopen with": discards the text and decodes the file again. */
+  /** "Reopen with": discards the text and decodes the file again. A large file reopens in the viewer, never whole. */
   async reopenWithEncoding(doc: Doc, enc: Encoding): Promise<void> {
     if (!doc.path) return;
+    if (doc.large) {
+      if (!(await this.openLarge(doc, enc))) return;
+      if (doc.id === this.activeId) await this.showLarge(doc);
+      this.emit("tabs");
+      this.emit("doc");
+      this.persist();
+      return;
+    }
     if (this.isDirty(doc) && !(await confirmSheet(t("reopen.title"), t("reopen.message"), t("reopen.confirm"), true))) return;
     try {
       this.replaceContents(doc, await api.openFileAs(doc.path, enc, settings.value.defaultEol));

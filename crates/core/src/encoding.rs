@@ -184,9 +184,20 @@ const BOM_UTF16_BE: &[u8] = &[0xFE, 0xFF];
 /// How much of a file the statistical detector looks at.
 const DETECT_LIMIT: usize = 1 << 20;
 
-/// Guesses the encoding of `bytes`: BOM, then ISO-2022-JP escapes, valid UTF-8, BOM-less UTF-16
+/// Guesses the encoding of a whole file: BOM, then ISO-2022-JP escapes, valid UTF-8, BOM-less UTF-16
 /// (many NULs), and finally a statistical guess (`chardetng`) restricted to the supported set.
+/// A multi-byte sequence cut off at the very end makes the file invalid UTF-8.
 pub fn detect(bytes: &[u8]) -> TextEncoding {
+    detect_impl(bytes, false)
+}
+
+/// Like [`detect`], for an excerpt (the head of a bigger file): a multi-byte UTF-8 sequence cut off
+/// at the end of the excerpt is only the cut and does not count against UTF-8.
+pub fn detect_sample(bytes: &[u8]) -> TextEncoding {
+    detect_impl(bytes, true)
+}
+
+fn detect_impl(bytes: &[u8], sample_only: bool) -> TextEncoding {
     if bytes.starts_with(BOM_UTF8) {
         return TextEncoding::Utf8Bom;
     }
@@ -205,15 +216,16 @@ pub fn detect(bytes: &[u8]) -> TextEncoding {
     if std::str::from_utf8(bytes).is_ok() {
         return TextEncoding::Utf8;
     }
-    // A multi-byte sequence cut off at the end of the file still counts as UTF-8.
-    if let Err(e) = std::str::from_utf8(bytes) {
-        if e.error_len().is_none() && std::str::from_utf8(&bytes[..e.valid_up_to()]).is_ok() {
-            return TextEncoding::Utf8;
+    if sample_only {
+        if let Err(e) = std::str::from_utf8(bytes) {
+            if e.error_len().is_none() && std::str::from_utf8(&bytes[..e.valid_up_to()]).is_ok() {
+                return TextEncoding::Utf8;
+            }
         }
     }
     let sample = &bytes[..bytes.len().min(DETECT_LIMIT)];
     let mut det = chardetng::EncodingDetector::new();
-    det.feed(sample, sample.len() == bytes.len());
+    det.feed(sample, !sample_only && sample.len() == bytes.len());
     let (guess, confident) = det.guess_assess(None, false);
     if guess == encoding_rs::UTF_16LE {
         return TextEncoding::Utf16Le;
@@ -405,10 +417,21 @@ mod tests {
     }
 
     #[test]
-    fn truncated_utf8_tail_is_still_utf8() {
+    fn truncated_utf8_tail_is_utf8_only_in_a_sample() {
         let mut b = "abc æ".as_bytes().to_vec();
         b.pop();
-        assert_eq!(detect(&b), TextEncoding::Utf8);
+        assert_eq!(detect_sample(&b), TextEncoding::Utf8);
+        // A whole file ending in half a character is not valid UTF-8.
+        assert_ne!(detect(&b), TextEncoding::Utf8);
+        assert!(decode(&b).lossy || decode(&b).encoding != TextEncoding::Utf8);
+    }
+
+    #[test]
+    fn real_invalid_utf8_is_not_rescued_by_sample_mode() {
+        assert_eq!(
+            detect_sample(b"bl\xE5b\xE6r og mer tekst her"),
+            TextEncoding::Windows1252
+        );
     }
 
     #[test]

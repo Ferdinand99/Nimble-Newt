@@ -2,6 +2,7 @@ import { api, errorMessage, type LargeHit, type LargeOpened, type LargeQuery, ty
 import { debounce, h, icon } from "../lib/dom";
 import { t } from "../lib/i18n";
 import { clamp } from "../lib/logic";
+import { LargeOps } from "../lib/largeOps";
 import { toast } from "./toast";
 import "../styles/largeview.css";
 
@@ -340,24 +341,28 @@ export class LargeViewer {
     this.findBar.hidden = true;
     this.hit = null;
     api.lfCancel(this.opened.id).catch(() => {});
+    this.ops.start("count"); // a count still running must not write into the hidden bar
+    this.ops.start("search");
     void this.render();
     this.viewport.focus();
   }
 
-  private countToken = 0;
+  private readonly ops = new LargeOps();
   private readonly countSoon = debounce(async () => {
     const q = this.query();
-    const mine = ++this.countToken;
+    const { op: mine, stale } = this.ops.start("count");
+    if (stale !== null) api.lfCancel(this.opened.id, stale).catch(() => {});
     if (!q.pattern) {
+      this.ops.finish("count", mine);
       this.count.textContent = "";
       return;
     }
     this.count.textContent = t("large.counting");
     try {
-      const n = await api.lfCount(this.opened.id, q);
-      if (mine === this.countToken) this.count.textContent = n === 0 ? t("find.noResults") : t("find.results", { n: n.toLocaleString() });
+      const n = await api.lfCount(this.opened.id, q, mine);
+      if (this.ops.finish("count", mine)) this.count.textContent = n === 0 ? t("find.noResults") : t("find.results", { n: n.toLocaleString() });
     } catch (e) {
-      if (mine === this.countToken) this.count.textContent = errorMessage(e) === "cancelled" ? "" : t("find.invalid");
+      if (this.ops.finish("count", mine)) this.count.textContent = errorMessage(e) === "cancelled" ? "" : t("find.invalid");
     }
   }, 350);
 
@@ -375,9 +380,12 @@ export class LargeViewer {
     const from = this.hit
       ? { line: this.hit.line, column: dir === "forward" ? this.hit.column + Math.max(1, this.hit.length) : this.hit.column }
       : { line: Math.floor(this.top) + (dir === "forward" ? 0 : 0), column: 0 };
+    const { op, stale } = this.ops.start("search");
+    if (stale !== null) api.lfCancel(this.opened.id, stale).catch(() => {});
     this.count.textContent = t("large.searching");
     try {
-      const hit = await api.lfSearch(this.opened.id, q, from, dir);
+      const hit = await api.lfSearch(this.opened.id, q, from, dir, op);
+      if (!this.ops.finish("search", op)) return; // superseded by a newer search
       this.count.textContent = "";
       if (!hit) {
         this.hit = null;
@@ -392,6 +400,7 @@ export class LargeViewer {
       void this.render();
       this.countSoon();
     } catch (e) {
+      if (!this.ops.finish("search", op)) return;
       this.count.textContent = "";
       this.findInput.setAttribute("aria-invalid", "true");
       if (errorMessage(e) !== "cancelled") toast(errorMessage(e), "error");

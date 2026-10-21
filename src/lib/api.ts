@@ -216,9 +216,11 @@ export const api = {
   lfOpen: (path: string, encoding: Encoding | null = null) => invoke<LargeOpened>("lf_open", { path, encoding }),
   lfStatus: (id: number) => invoke<IndexStatus>("lf_status", { id }),
   lfRead: (id: number, first: number, count: number, maxChars: number) => invoke<LinesChunk>("lf_read", { id, first, count, maxChars }),
-  lfSearch: (id: number, query: LargeQuery, from: { line: number; column: number }, direction: "forward" | "backward") => invoke<LargeHit | null>("lf_search", { id, query, from, direction }),
-  lfCount: (id: number, query: LargeQuery) => invoke<number>("lf_count", { id, query }),
-  lfCancel: (id: number) => invoke<void>("lf_cancel", { id }),
+  /** `op` names this search for `lfCancel`; ids are chosen by the caller (see `LargeOps`). */
+  lfSearch: (id: number, query: LargeQuery, from: { line: number; column: number }, direction: "forward" | "backward", op: number) => invoke<LargeHit | null>("lf_search", { id, query, from, direction, op }),
+  lfCount: (id: number, query: LargeQuery, op: number) => invoke<number>("lf_count", { id, query, op }),
+  /** Cancels the search or count `op`; without `op` every one running on the file. */
+  lfCancel: (id: number, op: number | null = null) => invoke<void>("lf_cancel", { id, op }),
   lfRefresh: (id: number) => invoke<IndexStatus>("lf_refresh", { id }),
   lfClose: (id: number) => invoke<void>("lf_close", { id }),
   hashText: (text: string, algorithms: HashAlgorithm[]) => invoke<Digest[]>("hash_text", { text, algorithms }),
@@ -229,7 +231,7 @@ export const api = {
   compareClose: (id: number) => invoke<void>("compare_close", { id }),
   openFile: (path: string, defaultEol: Eol) => invoke<OpenedFile>("open_file", { path, defaultEol }),
   openFileAs: (path: string, encoding: Encoding, defaultEol: Eol) => invoke<OpenedFile>("open_file_as", { path, encoding, defaultEol }),
-  saveFile: (path: string, text: string, encoding: Encoding, eol: Eol, expectedMtimeMs: number | null) => invoke<WriteResult>("save_file", { path, text, encoding, eol, expectedMtimeMs }),
+  saveFile: (path: string, text: string, encoding: Encoding, eol: Eol, expectedMtimeMs: number | null, allowLossy = false) => invoke<WriteResult>("save_file", { path, text, encoding, eol, expectedMtimeMs, allowLossy }),
   fileMtimes: (paths: string[]) => invoke<(number | null)[]>("file_mtimes", { paths }),
   sessionLoad: () => invoke<RestoredSession>("session_load"),
   sessionSave: (meta: SessionMeta) => invoke<void>("session_save", { meta }),

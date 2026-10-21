@@ -21,6 +21,9 @@ pub enum Error {
     Msg(String),
     #[error("{0} was changed by another program since it was opened")]
     Conflict(String),
+    /// Saving would lose characters the target encoding (the label) cannot represent.
+    #[error("some characters cannot be represented in {0}")]
+    Lossy(String),
     #[error("invalid pattern: {0}")]
     Pattern(String),
     #[error("serialization error: {0}")]

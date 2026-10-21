@@ -78,13 +78,15 @@ async fn open_file_as(
 
 #[derive(Serialize)]
 struct SaveFailure {
-    /// `conflict`: the file changed on disk after it was opened; anything else is `other`.
+    /// `conflict`: the file changed on disk after it was opened; `lossy`: the text has characters the
+    /// encoding cannot hold (and `allow_lossy` was not set); anything else is `other`.
     kind: &'static str,
     message: String,
 }
 
 /// `expected_mtime_ms` is the modification time the editor last saw; a different time on disk
 /// is refused as a conflict. Pass `None` for new files, "Save As" and a confirmed overwrite.
+/// Unless `allow_lossy`, text the encoding cannot represent is refused (`lossy`) and nothing is written.
 #[tauri::command]
 async fn save_file(
     path: String,
@@ -92,16 +94,23 @@ async fn save_file(
     encoding: TextEncoding,
     eol: Eol,
     expected_mtime_ms: Option<i64>,
+    allow_lossy: bool,
 ) -> Result<WriteResult, SaveFailure> {
-    fileio::write_checked(Path::new(&path), &text, encoding, eol, expected_mtime_ms).map_err(|e| {
-        SaveFailure {
-            kind: if matches!(e, nimble_core::Error::Conflict(_)) {
-                "conflict"
-            } else {
-                "other"
-            },
-            message: e.to_string(),
-        }
+    fileio::write_checked(
+        Path::new(&path),
+        &text,
+        encoding,
+        eol,
+        expected_mtime_ms,
+        allow_lossy,
+    )
+    .map_err(|e| SaveFailure {
+        kind: match e {
+            nimble_core::Error::Conflict(_) => "conflict",
+            nimble_core::Error::Lossy(_) => "lossy",
+            _ => "other",
+        },
+        message: e.to_string(),
     })
 }
 
@@ -214,15 +223,17 @@ async fn find_files(
 // ---- large files ---------------------------------------------------------------
 
 use nimble_core::largefile::{
-    self, Direction, Hit, IndexOptions, IndexStatus, LargeFile, LargeQuery, LinesChunk, OpenInfo,
-    SearchPos,
+    self, CancelRegistry, Direction, Hit, IndexOptions, IndexStatus, LargeFile, LargeQuery,
+    LinesChunk, OpenInfo, SearchPos,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 struct LargeHandle {
     file: Arc<LargeFile>,
-    cancel: Arc<AtomicBool>,
+    /// One cancellation flag per running search / count, by the id the viewer picked.
+    ops: CancelRegistry,
+    /// Stops the background indexer.
     closed: Arc<AtomicBool>,
 }
 
@@ -241,17 +252,10 @@ impl LargeFiles {
     }
 }
 
-/// Indexes in the background, one chunk at a time, until the whole file is done or the viewer closed.
-fn spawn_indexer(h: Arc<LargeHandle>) {
-    std::thread::spawn(move || {
-        while !h.closed.load(Ordering::Relaxed) {
-            match h.file.index_step(64 * 1024 * 1024) {
-                Ok(st) if st.done => break,
-                Ok(_) => {}
-                Err(_) => break,
-            }
-        }
-    });
+/// Indexes in the background until the whole file is done or the viewer closed. Does nothing while
+/// an indexer is already running for this file.
+fn spawn_indexer(h: &LargeHandle) {
+    let _ = h.file.spawn_indexer(h.closed.clone());
 }
 
 #[derive(Serialize)]
@@ -294,7 +298,7 @@ async fn lf_open(
     let status = file.status();
     let handle = Arc::new(LargeHandle {
         file: Arc::new(file),
-        cancel: Arc::default(),
+        ops: CancelRegistry::default(),
         closed: Arc::default(),
     });
     let id = {
@@ -304,7 +308,7 @@ async fn lf_open(
         g.1.insert(id, handle.clone());
         id
     };
-    spawn_indexer(handle);
+    spawn_indexer(&handle);
     Ok(LargeOpened { id, info, status })
 }
 
@@ -338,31 +342,17 @@ async fn lf_search(
     query: LargeQuery,
     from: SearchPos,
     direction: Direction,
+    op: u64,
 ) -> CmdResult<Option<Hit>> {
     let h = files.get(id)?;
-    h.cancel.store(false, Ordering::Relaxed);
-    tauri::async_runtime::spawn_blocking(move || h.file.search(&query, from, direction, &h.cancel))
-        .await
-        .map_err(err)?
-        .map_err(|e| {
-            if largefile::is_cancelled(&e) {
-                largefile::CANCELLED.to_string()
-            } else {
-                e.to_string()
-            }
-        })
-}
-
-#[tauri::command]
-async fn lf_count(files: State<'_, LargeFiles>, id: u64, query: LargeQuery) -> CmdResult<u64> {
-    let h = files.get(id)?;
-    h.cancel.store(false, Ordering::Relaxed);
-    tauri::async_runtime::spawn_blocking(move || {
-        h.file.count_matches(&query, &h.cancel, &mut |_| {})
+    let cancel = h.ops.begin(op);
+    let r = tauri::async_runtime::spawn_blocking(move || {
+        let r = h.file.search(&query, from, direction, &cancel);
+        h.ops.end(op);
+        r
     })
-    .await
-    .map_err(err)?
-    .map_err(|e| {
+    .await;
+    r.map_err(err)?.map_err(|e| {
         if largefile::is_cancelled(&e) {
             largefile::CANCELLED.to_string()
         } else {
@@ -371,11 +361,38 @@ async fn lf_count(files: State<'_, LargeFiles>, id: u64, query: LargeQuery) -> C
     })
 }
 
-/// Stops a running search or count on this file.
 #[tauri::command]
-fn lf_cancel(files: State<'_, LargeFiles>, id: u64) {
+async fn lf_count(
+    files: State<'_, LargeFiles>,
+    id: u64,
+    query: LargeQuery,
+    op: u64,
+) -> CmdResult<u64> {
+    let h = files.get(id)?;
+    let cancel = h.ops.begin(op);
+    let r = tauri::async_runtime::spawn_blocking(move || {
+        let r = h.file.count_matches(&query, &cancel, &mut |_| {});
+        h.ops.end(op);
+        r
+    })
+    .await;
+    r.map_err(err)?.map_err(|e| {
+        if largefile::is_cancelled(&e) {
+            largefile::CANCELLED.to_string()
+        } else {
+            e.to_string()
+        }
+    })
+}
+
+/// Stops the search or count `op` of this file; without `op`, all that run now.
+#[tauri::command]
+fn lf_cancel(files: State<'_, LargeFiles>, id: u64, op: Option<u64>) {
     if let Ok(h) = files.get(id) {
-        h.cancel.store(true, Ordering::Relaxed);
+        match op {
+            Some(op) => h.ops.cancel(op),
+            None => h.ops.cancel_all(),
+        }
     }
 }
 
@@ -389,7 +406,7 @@ async fn lf_refresh(files: State<'_, LargeFiles>, id: u64) -> CmdResult<IndexSta
         .map_err(err)?
         .map_err(err)?;
     if !st.done {
-        spawn_indexer(h);
+        spawn_indexer(&h);
     }
     Ok(st)
 }
@@ -398,7 +415,7 @@ async fn lf_refresh(files: State<'_, LargeFiles>, id: u64) -> CmdResult<IndexSta
 fn lf_close(files: State<'_, LargeFiles>, id: u64) {
     if let Some(h) = files.0.lock().unwrap().1.remove(&id) {
         h.closed.store(true, Ordering::Relaxed);
-        h.cancel.store(true, Ordering::Relaxed);
+        h.ops.cancel_all();
     }
 }
 
@@ -627,6 +644,7 @@ fn ext_install_path(
     store: &nimble_core::extensions::ExtensionStore,
     path: &str,
     allow_same: bool,
+    expected: &nimble_core::extensions::Manifest,
 ) -> nimble_core::Result<nimble_core::extensions::Manifest> {
     let p = std::path::Path::new(path);
     if p.is_dir() {
@@ -677,8 +695,10 @@ async fn ext_install(
     store: State<'_, nimble_core::extensions::ExtensionStore>,
     path: String,
     allow_same: bool,
+    expected: nimble_core::extensions::Manifest,
 ) -> CmdResult<nimble_core::extensions::Manifest> {
-    ext_install_path(&store, &path, allow_same).map_err(err)
+    let store = store.inner().clone();
+    blocking(move || ext_install_path(&store, &path, allow_same, &expected).map_err(err)).await?
 }
 
 #[tauri::command]
@@ -785,6 +805,19 @@ fn app_ready(app: AppHandle, frontend_ms: f64, stages: serde_json::Value) -> boo
         );
         app.exit(0);
     }
+    selftest
+}
+
+/// Result of the extension self-test (see `app_ready`): writes `ok` or the failure message and exits.
+#[tauri::command]
+fn selftest_done(app: AppHandle, ok: bool, message: String) {
+    if let Some(path) = std::env::var_os("NIMBLE_EXT_SELFTEST") {
+        let _ = std::fs::write(
+            path,
+            format!("{}: {message}\n", if ok { "ok" } else { "failed" }),
+        );
+    }
+    app.exit(if ok { 0 } else { 1 });
 }
 
 #[tauri::command]
@@ -813,19 +846,6 @@ fn failure(message: impl std::fmt::Display) -> UpdateFailure {
         kind: update::classify_error(&message),
         message,
     }
-    selftest
-}
-
-/// Result of the extension self-test (see `app_ready`): writes `ok` or the failure message and exits.
-#[tauri::command]
-fn selftest_done(app: AppHandle, ok: bool, message: String) {
-    if let Some(path) = std::env::var_os("NIMBLE_EXT_SELFTEST") {
-        let _ = std::fs::write(
-            path,
-            format!("{}: {message}\n", if ok { "ok" } else { "failed" }),
-        );
-    }
-    app.exit(if ok { 0 } else { 1 });
 }
 
 fn updater_key_configured(app: &AppHandle) -> bool {

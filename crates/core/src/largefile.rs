@@ -17,6 +17,7 @@ use memchr::{memchr, memchr_iter, memrchr};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io;
 use std::ops::Range;
@@ -224,11 +225,66 @@ pub struct LargeFile {
     path: PathBuf,
     encoding: TextEncoding,
     eol: Eol,
-    bom_len: u64,
     opts: IndexOptions,
     /// Serialises `index_step` / `refresh`; readers never take it.
     index_lock: Mutex<()>,
+    /// A background indexing thread owns this (see [`LargeFile::try_begin_indexing`]).
+    indexing: AtomicBool,
     state: Mutex<State>,
+}
+
+/// Length of the BOM that `head` (the start of a file) has when read as `enc`.
+fn bom_len_for(enc: TextEncoding, head: &[u8]) -> u64 {
+    match enc {
+        TextEncoding::Utf8 | TextEncoding::Utf8Bom if head.starts_with(BOM_UTF8) => 3,
+        _ => 0,
+    }
+}
+
+/// Cancellation flags of the long operations (search, count) running on one file, keyed by an id the
+/// caller picks, so cancelling or starting one never touches another.
+#[derive(Default)]
+pub struct CancelRegistry {
+    flags: Mutex<HashMap<u64, Arc<AtomicBool>>>,
+}
+
+impl CancelRegistry {
+    /// The flag for operation `op`, to pass to `search` / `count_matches`. A `cancel` that arrived
+    /// before `begin` is kept, so the operation ends at once.
+    pub fn begin(&self, op: u64) -> Arc<AtomicBool> {
+        lock(&self.flags).entry(op).or_default().clone()
+    }
+
+    /// Forgets `op` once it has finished.
+    pub fn end(&self, op: u64) {
+        lock(&self.flags).remove(&op);
+    }
+
+    /// Cancels `op` only.
+    pub fn cancel(&self, op: u64) {
+        lock(&self.flags)
+            .entry(op)
+            .or_default()
+            .store(true, Ordering::Relaxed);
+    }
+
+    /// Cancels every operation running now.
+    pub fn cancel_all(&self) {
+        for f in lock(&self.flags).values() {
+            f.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Proof that this thread is the file's only background indexer; released on drop.
+pub struct IndexingGuard {
+    file: Arc<LargeFile>,
+}
+
+impl Drop for IndexingGuard {
+    fn drop(&mut self) {
+        self.file.indexing.store(false, Ordering::Release);
+    }
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -546,6 +602,25 @@ fn cut_units(s: &str, max: usize) -> (usize, bool) {
     (s.len(), false)
 }
 
+/// Turns ascending byte offsets within one line into UTF-16 columns in a single pass over the line.
+struct ColumnCursor {
+    byte: usize,
+    col: usize,
+}
+
+impl ColumnCursor {
+    fn new() -> ColumnCursor {
+        ColumnCursor { byte: 0, col: 0 }
+    }
+
+    /// The column of `byte`, which must not be smaller than in the previous call.
+    fn at(&mut self, text: &str, byte: usize) -> usize {
+        self.col += utf16_len(&text[self.byte..byte]);
+        self.byte = byte;
+        self.col
+    }
+}
+
 fn unit_to_byte(s: &str, unit: usize) -> usize {
     let mut units = 0;
     for (i, c) in s.char_indices() {
@@ -612,7 +687,20 @@ impl LargeFile {
         let mut head = vec![0u8; HEAD_BYTES.min(size as usize)];
         let got = read_full_at(&file, &mut head, 0)?;
         head.truncate(got);
-        let enc = encoding.unwrap_or_else(|| encoding::detect(&head));
+        // The head is only a prefix of a bigger file: cut it at the last line break so a character
+        // split by the end of the sample cannot sway the verdict.
+        let partial = (got as u64) < size;
+        let sample = match (partial, memrchr(b'\n', &head)) {
+            (true, Some(i)) => &head[..=i],
+            _ => &head[..],
+        };
+        let enc = encoding.unwrap_or_else(|| {
+            if partial {
+                encoding::detect_sample(sample)
+            } else {
+                encoding::detect(sample)
+            }
+        });
         if matches!(enc, TextEncoding::Utf16Le | TextEncoding::Utf16Be) {
             return Err(Error::Msg(format!(
                 "{} is UTF-16, which large-file mode cannot read (its line breaks are not byte-addressable)",
@@ -625,12 +713,9 @@ impl LargeFile {
                 path.display()
             )));
         }
-        let bom_len = match enc {
-            TextEncoding::Utf8 | TextEncoding::Utf8Bom if head.starts_with(BOM_UTF8) => 3,
-            _ => 0,
-        };
+        let bom_len = bom_len_for(enc, &head);
         let mut body = &head[bom_len as usize..];
-        if head.len() == HEAD_BYTES {
+        if partial {
             body = body.strip_suffix(b"\r").unwrap_or(body);
         }
         let head_text = decode_bytes(enc, body, false);
@@ -643,9 +728,9 @@ impl LargeFile {
             path: path.to_path_buf(),
             encoding: enc,
             eol,
-            bom_len,
             opts,
             index_lock: Mutex::new(()),
+            indexing: AtomicBool::new(false),
             state: Mutex::new(State::fresh(Arc::new(file), size, bom_len)),
         };
         let info = OpenInfo {
@@ -660,6 +745,11 @@ impl LargeFile {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Length of the BOM line 0 starts after. Recomputed when `refresh` finds a replaced file.
+    pub fn bom_len(&self) -> u64 {
+        lock(&self.state).base
     }
 
     pub fn encoding(&self) -> TextEncoding {
@@ -758,6 +848,39 @@ impl LargeFile {
         Ok(self.status())
     }
 
+    /// Claims the right to index in the background; `None` while another indexer is running.
+    pub fn try_begin_indexing(self: &Arc<Self>) -> Option<IndexingGuard> {
+        (!self.indexing.swap(true, Ordering::AcqRel)).then(|| IndexingGuard { file: self.clone() })
+    }
+
+    /// Indexes in a background thread, one chunk at a time, until the file is done or `closed` is set.
+    /// Returns `None` (and starts nothing) when an indexer is already running.
+    pub fn spawn_indexer(
+        self: &Arc<Self>,
+        closed: Arc<AtomicBool>,
+    ) -> Option<std::thread::JoinHandle<()>> {
+        let mut guard = self.try_begin_indexing()?;
+        let lf = self.clone();
+        Some(std::thread::spawn(move || loop {
+            while !closed.load(Ordering::Relaxed) {
+                match lf.index_step(64 * 1024 * 1024) {
+                    Ok(st) if st.done => break,
+                    Ok(_) => {}
+                    Err(_) => return,
+                }
+            }
+            drop(guard);
+            // The file may have grown (a `refresh` found its indexer still running) in the meantime.
+            if closed.load(Ordering::Relaxed) || lf.status().done {
+                return;
+            }
+            match lf.try_begin_indexing() {
+                Some(g) => guard = g,
+                None => return,
+            }
+        }))
+    }
+
     /// Indexes the whole file. Stops early (returning the partial status) when `cancel` is set.
     pub fn index_all(&self, cancel: &AtomicBool) -> Result<IndexStatus> {
         loop {
@@ -787,11 +910,15 @@ impl LargeFile {
         let _g = lock(&self.index_lock);
         let file = File::open(&self.path)?;
         let new_size = file.metadata()?.len();
-        let (indexed, tail) = {
+        let (indexed, tail, base) = {
             let s = lock(&self.state);
-            (s.indexed_bytes, s.tail.clone())
+            (s.indexed_bytes, s.tail.clone(), s.base)
         };
-        let mut reset = new_size < indexed;
+        // A rotated file may have gained or lost its BOM.
+        let mut head = [0u8; BOM_UTF8.len()];
+        let got = read_full_at(&file, &mut head, 0)?;
+        let bom = bom_len_for(self.encoding, &head[..got]);
+        let mut reset = new_size < indexed || bom != base;
         if !reset && !tail.is_empty() {
             let mut check = vec![0u8; tail.len()];
             let got = read_full_at(&file, &mut check, indexed - tail.len() as u64)?;
@@ -800,7 +927,7 @@ impl LargeFile {
         {
             let mut s = lock(&self.state);
             if reset {
-                *s = State::fresh(Arc::new(file), new_size, self.bom_len);
+                *s = State::fresh(Arc::new(file), new_size, bom);
             } else {
                 s.file = Arc::new(file);
                 s.size = new_size;
@@ -999,8 +1126,9 @@ impl LargeFile {
             }
             let text = self.decode_line(f.bytes(&r), r.truncated);
             let min_col = if line == p.line0 { p.first_col } else { None };
+            let mut cols = ColumnCursor::new();
             for m in line_matches(re, &text) {
-                if min_col.is_some_and(|c| utf16_len(&text[..m.start()]) < c) {
+                if min_col.is_some_and(|c| cols.at(&text, m.start()) < c) {
                     continue;
                 }
                 return Ok(Some(self.make_hit(&text, line, r.offset, m.range(), false)));
@@ -1034,7 +1162,7 @@ impl LargeFile {
             last_line = Some(from.line);
         }
         let p = FwdPass {
-            off: self.bom_len,
+            off: self.bom_len(),
             end,
             line0: 0,
             first_col: None,
@@ -1055,7 +1183,7 @@ impl LargeFile {
         stop: u64,
         cancel: &AtomicBool,
     ) -> Result<Option<Hit>> {
-        let mut b = BackLines::new(file.clone(), self.bom_len, boundary, self.io_block(true))?;
+        let mut b = BackLines::new(file.clone(), self.bom_len(), boundary, self.io_block(true))?;
         let mut line = top;
         while let Some(r) = b.prev_line(MAX_LINE_BYTES)? {
             if cancel.load(Ordering::Relaxed) {
@@ -1088,8 +1216,9 @@ impl LargeFile {
             let mut f = FwdLines::new(file.clone(), off, end, self.io_block(true));
             if let Some(r) = f.next_line(MAX_LINE_BYTES)? {
                 let text = self.decode_line(f.bytes(&r), r.truncated);
+                let mut cols = ColumnCursor::new();
                 let last = line_matches(re, &text)
-                    .take_while(|m| utf16_len(&text[..m.start()]) < from.column)
+                    .take_while(|m| cols.at(&text, m.start()) < from.column)
                     .last();
                 if let Some(m) = last {
                     return Ok(Some(self.make_hit(&text, from.line, off, m.range(), false)));
@@ -1128,7 +1257,7 @@ impl LargeFile {
         let re = q.build()?;
         let file = lock(&self.state).file.clone();
         let end = file_len(&file)?;
-        let mut f = FwdLines::new(file, self.bom_len, end, self.io_block(true));
+        let mut f = FwdLines::new(file, self.bom_len(), end, self.io_block(true));
         let mut total = 0u64;
         let mut lines = 0u32;
         while let Some(r) = f.next_line(MAX_LINE_BYTES)? {
@@ -2282,5 +2411,120 @@ mod tests {
         println!("count regex: {n} in {:?}", t.elapsed());
         drop(lf);
         drop(dir);
+    }
+
+    #[test]
+    fn head_detection_ignores_a_character_split_at_the_sample_end() {
+        // Valid UTF-8 whose "é" straddles the end of the head sample.
+        let mut raw = Vec::new();
+        while raw.len() < HEAD_BYTES - 1 {
+            raw.extend_from_slice("ab\n".as_bytes());
+        }
+        raw.truncate(HEAD_BYTES - 1);
+        raw.extend_from_slice("é\n".as_bytes());
+        raw.extend_from_slice("tail\n".repeat(100).as_bytes());
+        assert_eq!(raw[HEAD_BYTES - 1], 0xC3);
+        let (_d, p) = write_tmp(&raw);
+        let (_, info) = LargeFile::open(&p, opts(4096, 10)).unwrap();
+        assert_eq!(info.encoding, TextEncoding::Utf8);
+        // A small file that is entirely cut mid-character is not UTF-8.
+        let (_d2, p2) = write_tmp(b"abc\n\xC3");
+        let (_, info) = LargeFile::open(&p2, opts(4096, 10)).unwrap();
+        assert_ne!(info.encoding, TextEncoding::Utf8);
+    }
+
+    #[test]
+    fn search_with_many_matches_on_one_long_line_is_not_quadratic() {
+        let line = "xé".repeat(400_000);
+        let units = line.encode_utf16().count();
+        let (_d, p) = write_tmp(format!("{line}\nend\n").as_bytes());
+        let lf = open_idx(&p, 64 * 1024, 100, None);
+        let q = LargeQuery {
+            pattern: "x".into(),
+            regex: false,
+            case_sensitive: true,
+            whole_word: false,
+        };
+        let t = std::time::Instant::now();
+        let from = SearchPos {
+            line: 0,
+            column: units - 20,
+        };
+        let h = lf
+            .search(&q, from, Direction::Forward, &NO)
+            .unwrap()
+            .unwrap();
+        assert_eq!((h.line, h.column, h.wrapped), (0, units - 20, false));
+        let h = lf
+            .search(&q, from, Direction::Backward, &NO)
+            .unwrap()
+            .unwrap();
+        assert_eq!((h.line, h.column, h.wrapped), (0, units - 22, false));
+        assert!(
+            t.elapsed() < std::time::Duration::from_secs(10),
+            "{:?}",
+            t.elapsed()
+        );
+    }
+
+    #[test]
+    fn cancel_registry_keeps_operations_apart() {
+        let r = CancelRegistry::default();
+        let (a, b) = (r.begin(1), r.begin(2));
+        r.cancel(1);
+        assert!(a.load(Ordering::Relaxed) && !b.load(Ordering::Relaxed));
+        // Starting another operation neither cancels nor revives the others.
+        let c = r.begin(3);
+        assert!(
+            a.load(Ordering::Relaxed) && !b.load(Ordering::Relaxed) && !c.load(Ordering::Relaxed)
+        );
+        // A cancel that beats the start of its operation is not lost.
+        r.cancel(4);
+        assert!(r.begin(4).load(Ordering::Relaxed));
+        r.end(1);
+        assert!(!r.begin(1).load(Ordering::Relaxed));
+        r.cancel_all();
+        assert!(b.load(Ordering::Relaxed) && c.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn only_one_background_indexer_at_a_time() {
+        let (_d, p) = write_tmp("line\n".repeat(5000).as_bytes());
+        let (lf, _) = LargeFile::open(&p, opts(1024, 10)).unwrap();
+        let lf = Arc::new(lf);
+        let closed = Arc::new(AtomicBool::new(false));
+        let guard = lf.try_begin_indexing().unwrap();
+        assert!(lf.try_begin_indexing().is_none());
+        assert!(lf.spawn_indexer(closed.clone()).is_none());
+        drop(guard);
+        let h = lf.spawn_indexer(closed.clone()).unwrap();
+        h.join().unwrap();
+        assert!(lf.status().done);
+        // The slot is free again once the thread ended.
+        assert!(lf.try_begin_indexing().is_some());
+    }
+
+    #[test]
+    fn refresh_recomputes_the_bom_after_rotation() {
+        let (_d, p) = write_tmp(b"\xEF\xBB\xBFab\ncd\n");
+        let lf = open_idx(&p, 4, 1, None);
+        assert_eq!(lf.bom_len(), 3);
+        // Rotated to a file without BOM (same length, so only the BOM tells).
+        std::fs::write(&p, b"ab\ncd\nef\n").unwrap();
+        assert!(lf.refresh().unwrap().reset);
+        lf.index_all(&NO).unwrap();
+        assert_eq!(lf.bom_len(), 0);
+        assert_eq!(lf.line_offset(0).unwrap(), Some(0));
+        let c = lf.read_lines(0, 5, 100).unwrap();
+        assert_eq!(c.lines[0].text, "ab");
+        assert_eq!(c.lines.len(), 3);
+        // ... and back to one with a BOM.
+        std::fs::write(&p, b"\xEF\xBB\xBFxy\nz\nw\nv\n").unwrap();
+        assert!(lf.refresh().unwrap().reset);
+        lf.index_all(&NO).unwrap();
+        assert_eq!(lf.bom_len(), 3);
+        let c = lf.read_lines(0, 5, 100).unwrap();
+        assert_eq!((c.lines[0].text.as_str(), c.lines[0].offset), ("xy", 3));
+        assert_eq!(c.lines.len(), 4);
     }
 }
