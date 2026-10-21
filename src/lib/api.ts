@@ -103,6 +103,24 @@ export interface UpdateFailure {
 }
 export type DownloadEvent = { event: "progress"; chunk: number; total: number | null } | { event: "finished" };
 
+export interface ExtManifest {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  minAppVersion?: string | null;
+  main: string;
+  permissions: string[];
+  contributes: { commands: { id: string; title: string }[]; menus?: unknown[] };
+}
+export interface InstalledExtension {
+  manifest: ExtManifest;
+  enabled: boolean;
+  dir: string;
+  builtin: boolean;
+}
+
 export interface Hunk {
   kind: "added" | "removed" | "changed";
   aStart: number;
@@ -222,6 +240,16 @@ export const api = {
   searchFolder: (options: SearchOptions, replacement: string | null) => invoke<SearchReport>("search_folder", { options, replacement }),
   replaceInFolder: (options: SearchOptions, replacement: string, paths: string[]) => invoke<ReplaceReport>("replace_in_folder", { options, replacement, paths }),
   takePendingPaths: () => invoke<string[]>("take_pending_paths"),
+  setExtensionMenu: (locale: string, items: { id: string; label: string }[]) => invoke<void>("set_extension_menu", { locale, items }),
+  extList: () => invoke<{ extensions: InstalledExtension[]; problems: string[] }>("ext_list"),
+  extInspect: (path: string) => invoke<ExtManifest>("ext_inspect", { path }),
+  extInstall: (path: string, allowSame: boolean) => invoke<ExtManifest>("ext_install", { path, allowSame }),
+  extRemove: (id: string) => invoke<void>("ext_remove", { id }),
+  extSetEnabled: (id: string, enabled: boolean) => invoke<void>("ext_set_enabled", { id, enabled }),
+  extReadMain: (id: string) => invoke<string>("ext_read_main", { id }),
+  extStorageGet: (id: string, key: string) => invoke<unknown>("ext_storage_get", { id, key }),
+  extStorageSet: (id: string, key: string, value: string) => invoke<void>("ext_storage_set", { id, key, value }),
+  extStorageRemove: (id: string, key: string) => invoke<void>("ext_storage_remove", { id, key }),
   setLocale: (locale: string) => invoke<void>("set_locale", { locale }),
   appReady: (stages: Record<string, number>) => invoke<void>("app_ready", { frontendMs: performance.now(), stages }),
   restartApp: () => invoke<void>("restart_app"),

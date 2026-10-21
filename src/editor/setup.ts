@@ -9,7 +9,6 @@ import { addCursorAbove, addCursorBelow, columnSelect } from "./commands";
 import { bookmarkExtension } from "./bookmarks";
 import { createFindPanel } from "./findpanel";
 import { highlightExtension } from "./highlights";
-import { wordCompletion, wordCompletionCompartment } from "./wordCompletion";
 import { recordable, recordingExtension, registerMacroCommand } from "./macroRecorder";
 import { highlighting } from "./theme";
 import { whitespace } from "./whitespace";
@@ -28,10 +27,15 @@ export const compartments = {
   whitespace: new Compartment(),
   indent: new Compartment(),
   minimap: new Compartment(),
+  completion: new Compartment(),
 };
 
 /** Set once the minimap module has loaded; until then the minimap slot stays empty. */
 let minimapExtension: Extension | null = null;
+let completionExtension: Extension | null = null;
+export function setCompletionExtension(e: Extension): void {
+  completionExtension = e;
+}
 export function setMinimapExtension(e: Extension): void {
   minimapExtension = e;
 }
@@ -111,7 +115,7 @@ export function dynamicExtensions(o: ViewOptions, lang: Extension = []): Extensi
     compartments.wrap.of(o.wrap ? EditorView.lineWrapping : []),
     compartments.whitespace.of(o.whitespace ? whitespace : []),
     compartments.indent.of(indentExtension(o.indent)),
-    wordCompletionCompartment.of(o.completion ? wordCompletion() : []),
+    compartments.completion.of(o.completion && completionExtension ? completionExtension : []),
     compartments.minimap.of(o.minimap && minimapExtension ? minimapExtension : []),
   ];
 }
@@ -132,7 +136,7 @@ export function reconfigureEffects(o: ViewOptions) {
     compartments.wrap.reconfigure(o.wrap ? EditorView.lineWrapping : []),
     compartments.whitespace.reconfigure(o.whitespace ? whitespace : []),
     compartments.indent.reconfigure(indentExtension(o.indent)),
-    wordCompletionCompartment.reconfigure(o.completion ? wordCompletion() : []),
+    compartments.completion.reconfigure(o.completion && completionExtension ? completionExtension : []),
     compartments.minimap.reconfigure(o.minimap && minimapExtension ? minimapExtension : []),
   ];
 }

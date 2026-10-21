@@ -522,6 +522,9 @@
   },
   {
    "id": "view.splitTabs"
+  },
+  {
+   "id": "app.extensions"
   }
  ],
  "menu": [
@@ -766,7 +769,8 @@
      ]
     },
     "-",
-    "tools.panel"
+    "tools.panel",
+    "app.extensions"
    ]
   },
   {

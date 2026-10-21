@@ -602,7 +602,133 @@ fn take_pending_paths(pending: State<'_, Pending>) -> Vec<String> {
 
 #[tauri::command]
 fn set_locale(app: AppHandle, locale: String) -> CmdResult<()> {
-    let m = menu::build(&app, &locale).map_err(err)?;
+    let m =
+        menu::build(&app, &locale, &app.state::<MenuExtras>().0.lock().unwrap()).map_err(err)?;
+    app.set_menu(m).map_err(err)?;
+    Ok(())
+}
+
+// ---- extensions ----------------------------------------------------------------------------
+
+type ExtList = (
+    Vec<nimble_core::extensions::InstalledExtension>,
+    Vec<String>,
+);
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExtListing {
+    extensions: Vec<nimble_core::extensions::InstalledExtension>,
+    problems: Vec<String>,
+}
+
+fn ext_install_path(
+    store: &nimble_core::extensions::ExtensionStore,
+    path: &str,
+    allow_same: bool,
+) -> nimble_core::Result<nimble_core::extensions::Manifest> {
+    let p = std::path::Path::new(path);
+    if p.is_dir() {
+        store.install_from_dir(p, env!("CARGO_PKG_VERSION"), allow_same)
+    } else {
+        store.install_from_zip(p, env!("CARGO_PKG_VERSION"), allow_same)
+    }
+}
+
+#[tauri::command]
+fn ext_list(store: State<'_, nimble_core::extensions::ExtensionStore>) -> ExtListing {
+    let (extensions, problems): ExtList = store.list();
+    ExtListing {
+        extensions,
+        problems,
+    }
+}
+
+#[tauri::command]
+fn ext_inspect(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    path: String,
+) -> CmdResult<nimble_core::extensions::Manifest> {
+    store
+        .inspect(std::path::Path::new(&path), env!("CARGO_PKG_VERSION"))
+        .map_err(err)
+}
+
+#[tauri::command]
+fn ext_install(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    path: String,
+    allow_same: bool,
+) -> CmdResult<nimble_core::extensions::Manifest> {
+    ext_install_path(&store, &path, allow_same).map_err(err)
+}
+
+#[tauri::command]
+fn ext_remove(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+) -> CmdResult<()> {
+    store.remove(&id).map_err(err)
+}
+
+#[tauri::command]
+fn ext_set_enabled(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+    enabled: bool,
+) -> CmdResult<()> {
+    store.set_enabled(&id, enabled).map_err(err)
+}
+
+#[tauri::command]
+fn ext_read_main(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+) -> CmdResult<String> {
+    store.read_main(&id).map_err(err)
+}
+
+#[tauri::command]
+fn ext_storage_get(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+    key: String,
+) -> CmdResult<Option<serde_json::Value>> {
+    store.storage_get(&id, &key).map_err(err)
+}
+
+#[tauri::command]
+fn ext_storage_set(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+    key: String,
+    value: serde_json::Value,
+) -> CmdResult<()> {
+    store.storage_set(&id, &key, &value).map_err(err)
+}
+
+#[tauri::command]
+fn ext_storage_remove(
+    store: State<'_, nimble_core::extensions::ExtensionStore>,
+    id: String,
+    key: String,
+) -> CmdResult<()> {
+    store.storage_remove(&id, &key).map_err(err)
+}
+
+#[derive(Default)]
+struct MenuExtras(Mutex<Vec<menu::Extra>>);
+
+/// Rebuilds the native menu with the commands that extensions contribute (shown under Tools, Extensions).
+#[tauri::command]
+fn set_extension_menu(
+    app: AppHandle,
+    extras: State<'_, MenuExtras>,
+    locale: String,
+    items: Vec<menu::Extra>,
+) -> CmdResult<()> {
+    *extras.0.lock().unwrap() = items;
+    let m = menu::build(&app, &locale, &extras.0.lock().unwrap()).map_err(err)?;
     app.set_menu(m).map_err(err)?;
     Ok(())
 }
@@ -781,15 +907,19 @@ pub fn run() {
         .manage(PendingUpdate::default())
         .manage(CompareCache::default())
         .manage(LargeFiles::default())
+        .manage(MenuExtras::default())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
+            app.manage(nimble_core::extensions::ExtensionStore::new(
+                dir.join("extensions"),
+            ));
             app.manage(SessionStore::new(dir).map_err(|e| e.to_string())?);
             let args = existing_files(
                 std::env::args().skip(1),
                 std::env::current_dir().ok().as_deref(),
             );
             app.state::<Pending>().deliver(args);
-            app.set_menu(menu::build(app.handle(), "en")?)?;
+            app.set_menu(menu::build(app.handle(), "en", &[])?)?;
             // The window starts hidden and the frontend shows it when ready. If the frontend never
             // gets that far, show it anyway so the user is not left with an invisible process.
             let handle = app.handle().clone();
@@ -849,6 +979,16 @@ pub fn run() {
             replace_in_folder,
             take_pending_paths,
             set_locale,
+            set_extension_menu,
+            ext_list,
+            ext_inspect,
+            ext_install,
+            ext_remove,
+            ext_set_enabled,
+            ext_read_main,
+            ext_storage_get,
+            ext_storage_set,
+            ext_storage_remove,
             app_ready,
             restart_app,
             check_update,

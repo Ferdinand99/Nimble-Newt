@@ -3,6 +3,7 @@
 pub mod diff;
 pub mod encoding;
 pub mod eol;
+pub mod extensions;
 pub mod fileio;
 pub mod folder;
 pub mod hash;

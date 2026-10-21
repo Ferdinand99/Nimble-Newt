@@ -14,15 +14,12 @@ import { isMac } from "../lib/dom";
 import { t } from "../lib/i18n";
 import { dirname, formatShortcut } from "../lib/logic";
 import { FONT_MAX, FONT_MIN, settings } from "../lib/settings";
-import { askColumnEdit } from "../ui/columnEdit";
-import { lineOpHandlers } from "./lineOpsCommands";
 import { openFolder, togglePanel, toggleFolder } from "./panels";
 import { promptNumber } from "../ui/dialog";
-import { openFindInFiles } from "../ui/fif";
 import { showMenu } from "../ui/menu";
 import { quickPick } from "../ui/palette";
-import { openSettings } from "../ui/settings";
 import { toast } from "../ui/toast";
+import { extensionCommands, isExtensionCommand } from "../ext/registry";
 import { accelFor, COMMAND_DEFS, MACRO_COMMANDS } from "./commandDefs";
 import * as macros from "./macros";
 import { checkForUpdates } from "./updater";
@@ -83,6 +80,7 @@ const active = () => workspace.active;
 async function columnEdit(): Promise<void> {
   const v = view();
   const ranges = v.state.selection.ranges;
+  const { askColumnEdit } = await import("../ui/columnEdit");
   const values = await askColumnEdit(ranges.length);
   if (!values) return;
   v.dispatch(
@@ -152,7 +150,7 @@ const handlers: Record<string, () => void | Promise<void>> = {
   "edit.replace": () => { requestReplaceRow(true); openSearchPanel(view()); },
   "edit.findNext": () => (workspace.largeViewer() ? void workspace.largeViewer()!.find("forward") : cm(findNext)()),
   "edit.findPrev": () => (workspace.largeViewer() ? void workspace.largeViewer()!.find("backward") : cm(findPrevious)()),
-  "edit.findInFiles": () => openFindInFiles(),
+  "edit.findInFiles": () => import("../ui/fif").then((m) => m.openFindInFiles()),
   "edit.gotoLine": gotoLine,
   "edit.duplicateLine": cm(copyLineDown),
   "edit.deleteLine": cm(deleteLine),
@@ -165,7 +163,7 @@ const handlers: Record<string, () => void | Promise<void>> = {
   "edit.addCursorBelow": cm(addCursorBelow),
   "edit.columnEdit": columnEdit,
   "edit.trimTrailing": trimTrailing,
-  ...lineOpHandlers,
+  ...Object.fromEntries([...COMMAND_DEFS.map((c) => c.id).filter((id) => id.startsWith("lineop.")), "edit.upperCase", "edit.lowerCase"].map((id) => [id, () => import("./lineOpsCommands").then((m) => m.lineOpHandlers[id]())])),
   "view.palette": () => openPalette(),
   "view.wrap": () => settings.set({ wordWrap: !settings.value.wordWrap }),
   "view.minimap": () => settings.set({ minimap: !settings.value.minimap }),
@@ -239,7 +237,8 @@ const handlers: Record<string, () => void | Promise<void>> = {
   ...Object.fromEntries(COMMAND_DEFS.filter((c) => c.id.startsWith("tools.") && c.id !== "tools.panel").map((c) => c.id).map((id) => [id, () => import("./toolsCommands").then((m) => m.runTool(id))])),
   "tools.panel": () => togglePanel("tools"),
   "lang.userLanguages": async () => (await import("../ui/userLanguages")).openLanguagesSheet(),
-  "app.settings": openSettings,
+  "app.extensions": () => import("../ui/extensions").then((m) => m.openExtensionsSheet()),
+  "app.settings": () => import("../ui/settings").then((m) => m.openSettings()),
   "app.checkUpdates": () => checkForUpdates(true),
   "app.about": () => void toast("Nimble Newt — MIT License — github.com/Ferdinand99/Nimble-Newt", "info", 6000),
 };
@@ -258,6 +257,10 @@ export function runCommand(id: string): void {
   if (lastRun.id === id && now - lastRun.at < 80) return;
   lastRun = { id, at: now };
   if (workspace.active?.large && !LARGE_OK.test(id)) return void toast(t("large.notAvailable"), "info");
+  if (isExtensionCommand(id)) {
+    void import("../ext/host").then((m) => m.runExtensionCommand(id));
+    return;
+  }
   if (recorder.recording && !recorder.playing && MACRO_COMMANDS.has(id)) recorder.push({ t: "cmd", c: id });
   const h = handlers[id];
   if (!h) return;
@@ -269,6 +272,7 @@ export async function openPalette(): Promise<void> {
     const accel = accelFor(c, isMac);
     return { label: t(`cmd.${c.id}`), shortcut: accel ? formatShortcut(accel, isMac) : undefined, value: c.id };
   });
+  for (const c of extensionCommands()) items.push({ label: c.title, shortcut: undefined, value: c.id });
   const id = await quickPick(items, t("palette.placeholder"));
   if (id) {
     // Let the palette close and return focus first so commands act on the editor.

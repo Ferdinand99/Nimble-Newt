@@ -160,7 +160,14 @@ impl Ctx<'_> {
     }
 }
 
-pub fn build(app: &AppHandle, locale: &str) -> tauri::Result<Menu<Wry>> {
+/// A menu entry contributed by an extension; `id` is forwarded to the frontend like any other.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Extra {
+    pub id: String,
+    pub label: String,
+}
+
+pub fn build(app: &AppHandle, locale: &str, extras: &[Extra]) -> tauri::Result<Menu<Wry>> {
     let spec: Spec = serde_json::from_str(COMMANDS).expect("commands.json is valid");
     let mac = cfg!(target_os = "macos");
     let ctx = Ctx {
@@ -207,7 +214,15 @@ pub fn build(app: &AppHandle, locale: &str) -> tauri::Result<Menu<Wry>> {
                 .build()?;
             menu = menu.item(&window);
         }
-        menu = menu.item(&ctx.submenu(top)?);
+        let sub = ctx.submenu(top)?;
+        if top.id == "tools" && !extras.is_empty() {
+            let mut ext = SubmenuBuilder::new(app, ctx.l("tools.extensions"));
+            for e in extras {
+                ext = ext.item(&MenuItemBuilder::with_id(&e.id, &e.label).build(app)?);
+            }
+            sub.append(&ext.build()?)?;
+        }
+        menu = menu.item(&sub);
     }
     menu.build()
 }

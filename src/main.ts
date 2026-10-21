@@ -13,7 +13,6 @@ import { isMac } from "./lib/dom";
 import { setLocale, t } from "./lib/i18n";
 import { PathInbox } from "./lib/pathInbox";
 import { applyTheme, settings } from "./lib/settings";
-import { openSettings } from "./ui/settings";
 import { initStatusbar } from "./ui/statusbar";
 import { initTabbar } from "./ui/tabbar";
 import { openSheet } from "./ui/dialog";
@@ -100,11 +99,14 @@ async function boot(): Promise<void> {
   inbox.attach((paths) => void workspace.openPaths(paths));
   document.getElementById("new-tab")!.addEventListener("click", () => {});
   document.getElementById("open-palette")!.addEventListener("click", () => void openPalette());
-  document.getElementById("open-settings")!.addEventListener("click", () => void openSettings());
+  document.getElementById("open-settings")!.addEventListener("click", () => runCommand("app.settings"));
 
   onUpdateAvailable((v) => status.setUpdate(v, () => void showAvailable()));
   startAutoUpdates();
+  // Extension manifests are read after the first paint; their scripts only load when a command runs.
+  void import("./ext/host").then((m) => m.initExtensions()).catch(() => {});
   if (settings.value.minimap) void workspace.ensureMinimap();
+  if (settings.value.wordCompletion) void workspace.ensureCompletion();
   void loadFolderState().then(() => restoreFolderPanel());
   // A hand-edited or outdated default encoding must not break saving later.
   void listEncodings().then((list) => {
