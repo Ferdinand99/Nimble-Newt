@@ -30,25 +30,100 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": ["msi", "nsis", "dmg", "app"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "targets": [
+      "msi",
+      "nsis",
+      "dmg",
+      "app"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "category": "DeveloperTool",
     "shortDescription": "A fast, modern text editor",
     "licenseFile": "../LICENSE",
-    "macOS": { "minimumSystemVersion": "11.0" },
-    "windows": { "wix": { "language": "en-US" } },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "windows": {
+      "wix": {
+        "language": "en-US"
+      }
+    },
     "fileAssociations": [
-      { "ext": ["txt", "text", "log"], "name": "Text document", "role": "Editor" },
-      { "ext": ["md", "markdown"], "name": "Markdown document", "role": "Editor" },
-      { "ext": ["json", "yaml", "yml", "toml", "xml", "ini", "cfg", "conf", "csv"], "name": "Data file", "role": "Editor" },
-      { "ext": ["js", "mjs", "ts", "tsx", "jsx", "css", "html", "htm", "py", "rs", "go", "c", "h", "cpp", "hpp", "cs", "java", "sql", "sh", "ps1"], "name": "Source file", "role": "Editor" }
+      {
+        "ext": [
+          "txt",
+          "text",
+          "log"
+        ],
+        "name": "Text document",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "md",
+          "markdown"
+        ],
+        "name": "Markdown document",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "json",
+          "yaml",
+          "yml",
+          "toml",
+          "xml",
+          "ini",
+          "cfg",
+          "conf",
+          "csv"
+        ],
+        "name": "Data file",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "js",
+          "mjs",
+          "ts",
+          "tsx",
+          "jsx",
+          "css",
+          "html",
+          "htm",
+          "py",
+          "rs",
+          "go",
+          "c",
+          "h",
+          "cpp",
+          "hpp",
+          "cs",
+          "java",
+          "sql",
+          "sh",
+          "ps1"
+        ],
+        "name": "Source file",
+        "role": "Editor"
+      }
     ]
   },
   "plugins": {
     "updater": {
-      "endpoints": ["https://github.com/Ferdinand99/Nimble-Newt/releases/latest/download/latest.json"],
+      "endpoints": [
+        "https://github.com/Ferdinand99/Nimble-Newt/releases/latest/download/latest.json"
+      ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEExMTA5OEI0NjQyRTNDMkIKUldRclBDNWt0SmdRb1N0R01tTzVxcUk1ZUxzMDJRdnM1K0RGVDg2Yi9xbXUzS2lJUDhMYi9nWEwK",
-      "windows": { "installMode": "passive" }
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
