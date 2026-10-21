@@ -213,6 +213,8 @@ const handlers: Record<string, () => void | Promise<void>> = {
   "compare.close": async () => (await import("./compare")).closeCompare(),
   "compare.next": async () => (await import("./compare")).nextDifference(),
   "compare.prev": async () => (await import("./compare")).previousDifference(),
+  ...Object.fromEntries(COMMAND_DEFS.filter((c) => c.id.startsWith("tools.") && c.id !== "tools.panel").map((c) => c.id).map((id) => [id, () => import("./toolsCommands").then((m) => m.runTool(id))])),
+  "tools.panel": () => togglePanel("tools"),
   "lang.userLanguages": async () => (await import("../ui/userLanguages")).openLanguagesSheet(),
   "app.settings": openSettings,
   "app.checkUpdates": () => checkForUpdates(true),

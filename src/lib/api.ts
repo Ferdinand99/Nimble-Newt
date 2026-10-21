@@ -131,7 +131,15 @@ export interface FileComparison {
   eolB: Eol;
 }
 
+export type HashAlgorithm = "md5" | "sha1" | "sha256" | "sha512";
+export interface Digest {
+  algorithm: HashAlgorithm;
+  hex: string;
+}
+
 export const api = {
+  hashText: (text: string, algorithms: HashAlgorithm[]) => invoke<Digest[]>("hash_text", { text, algorithms }),
+  hashFile: (path: string, algorithms: HashAlgorithm[]) => invoke<Digest[]>("hash_file", { path, algorithms }),
   compareText: (a: string, b: string, options: DiffOptions) => invoke<Comparison>("compare_text", { a, b, options }),
   compareFiles: (a: string, b: string, options: DiffOptions) => invoke<FileComparison>("compare_files", { a, b, options }),
   compareLines: (id: number, side: "a" | "b", start: number, len: number) => invoke<string[]>("compare_lines", { id, side, start, len }),

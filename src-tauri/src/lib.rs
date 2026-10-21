@@ -163,6 +163,50 @@ fn list_encodings() -> Vec<EncodingInfo> {
         .collect()
 }
 
+// ---- hashes -------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct Digest {
+    algorithm: nimble_core::hash::Algorithm,
+    hex: String,
+}
+
+fn digests(r: Vec<(nimble_core::hash::Algorithm, String)>) -> Vec<Digest> {
+    r.into_iter()
+        .map(|(algorithm, hex)| Digest { algorithm, hex })
+        .collect()
+}
+
+/// Digests of UTF-8 text (the editor's text, always with `\n` line breaks).
+#[tauri::command]
+async fn hash_text(
+    text: String,
+    algorithms: Vec<nimble_core::hash::Algorithm>,
+) -> CmdResult<Vec<Digest>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        nimble_core::hash::hash_reader(&algorithms, text.as_bytes())
+    })
+    .await
+    .map_err(err)?
+    .map(digests)
+    .map_err(err)
+}
+
+/// Digests of a file's raw bytes.
+#[tauri::command]
+async fn hash_file(
+    path: String,
+    algorithms: Vec<nimble_core::hash::Algorithm>,
+) -> CmdResult<Vec<Digest>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        nimble_core::hash::hash_file(Path::new(&path), &algorithms)
+    })
+    .await
+    .map_err(err)?
+    .map(digests)
+    .map_err(err)
+}
+
 // ---- compare -------------------------------------------------------------
 
 /// Decoded texts of finished file comparisons, so the UI can fetch the lines of a hunk without
@@ -550,6 +594,8 @@ pub fn run() {
             compare_files,
             compare_lines,
             compare_close,
+            hash_text,
+            hash_file,
             replace_in_folder,
             take_pending_paths,
             set_locale,

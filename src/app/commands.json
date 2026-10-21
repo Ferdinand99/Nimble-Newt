@@ -428,6 +428,75 @@
   {
    "id": "compare.prev",
    "accel": "Shift+F7"
+  },
+  {
+   "id": "tools.jsonFormat",
+   "macro": true
+  },
+  {
+   "id": "tools.jsonMinify",
+   "macro": true
+  },
+  {
+   "id": "tools.xmlFormat",
+   "macro": true
+  },
+  {
+   "id": "tools.xmlMinify",
+   "macro": true
+  },
+  {
+   "id": "tools.base64Encode",
+   "macro": true
+  },
+  {
+   "id": "tools.base64Decode",
+   "macro": true
+  },
+  {
+   "id": "tools.urlEncode",
+   "macro": true
+  },
+  {
+   "id": "tools.urlDecode",
+   "macro": true
+  },
+  {
+   "id": "tools.htmlEncode",
+   "macro": true
+  },
+  {
+   "id": "tools.htmlDecode",
+   "macro": true
+  },
+  {
+   "id": "tools.hexEncode",
+   "macro": true
+  },
+  {
+   "id": "tools.hexDecode",
+   "macro": true
+  },
+  {
+   "id": "tools.hash"
+  },
+  {
+   "id": "tools.hashFile"
+  },
+  {
+   "id": "tools.timestamp"
+  },
+  {
+   "id": "tools.insertTimestamp"
+  },
+  {
+   "id": "tools.insertUuid"
+  },
+  {
+   "id": "tools.insertUuidV7"
+  },
+  {
+   "id": "tools.panel"
   }
  ],
  "menu": [
@@ -616,6 +685,41 @@
    "id": "tools",
    "items": [
     {
+     "id": "tools.json",
+     "items": [
+      "tools.jsonFormat",
+      "tools.jsonMinify"
+     ]
+    },
+    {
+     "id": "tools.xml",
+     "items": [
+      "tools.xmlFormat",
+      "tools.xmlMinify"
+     ]
+    },
+    {
+     "id": "tools.encode",
+     "items": [
+      "tools.base64Encode",
+      "tools.base64Decode",
+      "tools.urlEncode",
+      "tools.urlDecode",
+      "tools.htmlEncode",
+      "tools.htmlDecode",
+      "tools.hexEncode",
+      "tools.hexDecode"
+     ]
+    },
+    "tools.hash",
+    "tools.hashFile",
+    "tools.timestamp",
+    "-",
+    "tools.insertTimestamp",
+    "tools.insertUuid",
+    "tools.insertUuidV7",
+    "-",
+    {
      "id": "tools.compare",
      "items": [
       "compare.withTab",
@@ -626,7 +730,9 @@
       "compare.prev",
       "compare.close"
      ]
-    }
+    },
+    "-",
+    "tools.panel"
    ]
   },
   {

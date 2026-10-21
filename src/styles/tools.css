@@ -1,0 +1,25 @@
+.tools {
+  padding: 10px 12px 16px;
+}
+.tools-hint {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.tools .group-title {
+  margin-top: 14px;
+}
+.tools-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tools-grid .btn {
+  height: auto;
+  min-height: 28px;
+  padding-block: 4px;
+  white-space: normal;
+  text-align: start;
+  font-weight: 500;
+}

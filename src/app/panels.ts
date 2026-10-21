@@ -3,7 +3,7 @@ import { t } from "../lib/i18n";
 import { createSidebar, type Sidebar } from "../ui/sidebar";
 import { workspace } from "./workspace";
 
-type PanelId = "outline";
+type PanelId = "outline" | "tools";
 
 let right: Sidebar | null = null;
 let current: PanelId | null = null;
@@ -30,6 +30,12 @@ export function togglePanel(id: PanelId): void {
     return;
   }
   current = id;
+  if (id === "tools") {
+    sb.open(t("cmd.tools.panel"), (body) => {
+      void import("../ui/toolsPanel").then(({ createToolsPanel }) => createToolsPanel(body));
+    });
+    return;
+  }
   sb.open(t("outline.title"), (body) => {
     let destroy: (() => void) | undefined;
     void import("../ui/outline").then(({ createOutlinePanel }) => {
