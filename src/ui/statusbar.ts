@@ -1,4 +1,6 @@
+import { toggleRecording } from "../app/macros";
 import { workspace } from "../app/workspace";
+import { recorder } from "../editor/macroRecorder";
 import { ENCODINGS, EOLS, type Encoding } from "../lib/api";
 import { h } from "../lib/dom";
 import { t } from "../lib/i18n";
@@ -26,10 +28,12 @@ export function initStatusbar(): StatusHandles {
   const lang = item("lang", () => void pickLanguage());
   const enc = item("enc", (b) => encodingMenu(b));
   const eol = item("eol", (b) => eolMenu(b));
+  const rec = item("status-rec", () => toggleRecording());
+  rec.hidden = true;
   const update = item("status-update", () => updateClick?.());
   update.hidden = true;
   let updateClick: (() => void) | undefined;
-  bar.append(pos, sel, h("span", { class: "spacer" }), update, indent, lang, enc, eol);
+  bar.append(pos, sel, rec, h("span", { class: "spacer" }), update, indent, lang, enc, eol);
 
   const render = () => {
     const d = workspace.active;
@@ -56,6 +60,11 @@ export function initStatusbar(): StatusHandles {
   };
   workspace.on((k) => {
     if (k !== "tabs") render();
+  });
+  recorder.onChange(() => {
+    rec.hidden = !recorder.recording;
+    rec.textContent = t("macro.recording", { n: recorder.count });
+    rec.title = t("macro.stopHint");
   });
   render();
 

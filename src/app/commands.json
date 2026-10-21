@@ -1,0 +1,433 @@
+{
+ "commands": [
+  {
+   "id": "file.new",
+   "accel": "CmdOrCtrl+N"
+  },
+  {
+   "id": "file.open",
+   "accel": "CmdOrCtrl+O"
+  },
+  {
+   "id": "file.quickOpen",
+   "accel": "CmdOrCtrl+P"
+  },
+  {
+   "id": "file.save",
+   "accel": "CmdOrCtrl+S"
+  },
+  {
+   "id": "file.saveAs",
+   "accel": "CmdOrCtrl+Shift+S"
+  },
+  {
+   "id": "file.saveAll",
+   "accel": "CmdOrCtrl+Alt+S"
+  },
+  {
+   "id": "file.close",
+   "accel": "CmdOrCtrl+W"
+  },
+  {
+   "id": "file.closeOthers"
+  },
+  {
+   "id": "file.reopenClosed",
+   "accel": "CmdOrCtrl+Shift+T"
+  },
+  {
+   "id": "edit.undo",
+   "accel": "CmdOrCtrl+Z",
+   "macro": true
+  },
+  {
+   "id": "edit.redo",
+   "accel": "CmdOrCtrl+Y",
+   "accelMac": "CmdOrCtrl+Shift+Z",
+   "macro": true
+  },
+  {
+   "id": "edit.selectAll",
+   "accel": "CmdOrCtrl+A",
+   "macro": true
+  },
+  {
+   "id": "edit.find",
+   "accel": "CmdOrCtrl+F"
+  },
+  {
+   "id": "edit.replace",
+   "accel": "CmdOrCtrl+H",
+   "accelMac": "Alt+CmdOrCtrl+F"
+  },
+  {
+   "id": "edit.findNext",
+   "accel": "F3",
+   "macro": true
+  },
+  {
+   "id": "edit.findPrev",
+   "accel": "Shift+F3",
+   "macro": true
+  },
+  {
+   "id": "edit.findInFiles",
+   "accel": "CmdOrCtrl+Shift+F"
+  },
+  {
+   "id": "edit.gotoLine",
+   "accel": "CmdOrCtrl+G",
+   "accelMac": "CmdOrCtrl+L"
+  },
+  {
+   "id": "edit.duplicateLine",
+   "accel": "CmdOrCtrl+Shift+D",
+   "editor": true,
+   "macro": true
+  },
+  {
+   "id": "edit.deleteLine",
+   "accel": "CmdOrCtrl+Shift+K",
+   "editor": true,
+   "macro": true
+  },
+  {
+   "id": "edit.moveLineUp",
+   "accel": "Alt+Up",
+   "editor": true,
+   "macro": true
+  },
+  {
+   "id": "edit.moveLineDown",
+   "accel": "Alt+Down",
+   "editor": true,
+   "macro": true
+  },
+  {
+   "id": "edit.toggleComment",
+   "accel": "CmdOrCtrl+/",
+   "editor": true,
+   "macro": true
+  },
+  {
+   "id": "edit.toggleBlockComment",
+   "accel": "CmdOrCtrl+Shift+A",
+   "editor": true,
+   "macro": true
+  },
+  {
+   "id": "edit.selectNext",
+   "accel": "CmdOrCtrl+D",
+   "editor": true,
+   "macro": true
+  },
+  {
+   "id": "edit.addCursorAbove",
+   "accel": "CmdOrCtrl+Alt+Up",
+   "editor": true,
+   "macro": true
+  },
+  {
+   "id": "edit.addCursorBelow",
+   "accel": "CmdOrCtrl+Alt+Down",
+   "editor": true,
+   "macro": true
+  },
+  {
+   "id": "edit.upperCase",
+   "macro": true
+  },
+  {
+   "id": "edit.lowerCase",
+   "macro": true
+  },
+  {
+   "id": "edit.trimTrailing",
+   "macro": true
+  },
+  {
+   "id": "edit.sortLines",
+   "macro": true
+  },
+  {
+   "id": "view.palette",
+   "accel": "CmdOrCtrl+Shift+P"
+  },
+  {
+   "id": "view.wrap",
+   "accel": "Alt+Z"
+  },
+  {
+   "id": "view.whitespace"
+  },
+  {
+   "id": "view.zoomIn",
+   "accel": "CmdOrCtrl+="
+  },
+  {
+   "id": "view.zoomOut",
+   "accel": "CmdOrCtrl+-"
+  },
+  {
+   "id": "view.zoomReset",
+   "accel": "CmdOrCtrl+0"
+  },
+  {
+   "id": "view.nextTab",
+   "accel": "Ctrl+Tab"
+  },
+  {
+   "id": "view.prevTab",
+   "accel": "Ctrl+Shift+Tab"
+  },
+  {
+   "id": "view.themeSystem"
+  },
+  {
+   "id": "view.themeLight"
+  },
+  {
+   "id": "view.themeDark"
+  },
+  {
+   "id": "doc.language"
+  },
+  {
+   "id": "doc.encoding"
+  },
+  {
+   "id": "doc.eol"
+  },
+  {
+   "id": "doc.indent"
+  },
+  {
+   "id": "app.settings",
+   "accel": "CmdOrCtrl+,"
+  },
+  {
+   "id": "app.checkUpdates"
+  },
+  {
+   "id": "app.about"
+  },
+  {
+   "id": "macro.record",
+   "accel": "CmdOrCtrl+Alt+R"
+  },
+  {
+   "id": "macro.play",
+   "accel": "CmdOrCtrl+Alt+P"
+  },
+  {
+   "id": "macro.playMany"
+  },
+  {
+   "id": "macro.playToEnd"
+  },
+  {
+   "id": "macro.save"
+  },
+  {
+   "id": "macro.runSaved"
+  },
+  {
+   "id": "macro.deleteSaved"
+  },
+  {
+   "id": "bookmark.toggle",
+   "accel": "CmdOrCtrl+F2"
+  },
+  {
+   "id": "bookmark.next",
+   "accel": "F2"
+  },
+  {
+   "id": "bookmark.prev",
+   "accel": "Shift+F2"
+  },
+  {
+   "id": "bookmark.clear"
+  },
+  {
+   "id": "bookmark.invert"
+  },
+  {
+   "id": "bookmark.copy"
+  },
+  {
+   "id": "bookmark.cut"
+  },
+  {
+   "id": "bookmark.delete"
+  },
+  {
+   "id": "bookmark.deleteUnmarked"
+  },
+  {
+   "id": "bookmark.fromSearch"
+  },
+  {
+   "id": "highlight.1",
+   "accel": "CmdOrCtrl+Shift+H"
+  },
+  {
+   "id": "highlight.2"
+  },
+  {
+   "id": "highlight.3"
+  },
+  {
+   "id": "highlight.4"
+  },
+  {
+   "id": "highlight.5"
+  },
+  {
+   "id": "highlight.clear"
+  },
+  {
+   "id": "lang.userLanguages"
+  }
+ ],
+ "menu": [
+  {
+   "id": "file",
+   "items": [
+    "file.new",
+    "file.open",
+    "file.quickOpen",
+    "-",
+    "file.save",
+    "file.saveAs",
+    "file.saveAll",
+    "-",
+    "file.close",
+    "file.closeOthers",
+    "file.reopenClosed",
+    "@settings",
+    "@quit"
+   ]
+  },
+  {
+   "id": "edit",
+   "items": [
+    "edit.undo",
+    "edit.redo",
+    "-",
+    "@cut",
+    "@copy",
+    "@paste",
+    "edit.selectAll",
+    "-",
+    "edit.duplicateLine",
+    "edit.deleteLine",
+    "edit.moveLineUp",
+    "edit.moveLineDown",
+    "edit.toggleComment",
+    "edit.toggleBlockComment",
+    "-",
+    {
+     "id": "edit.caseMenu",
+     "items": [
+      "edit.upperCase",
+      "edit.lowerCase"
+     ]
+    },
+    "edit.trimTrailing",
+    "edit.sortLines",
+    "-",
+    "edit.selectNext",
+    "edit.addCursorAbove",
+    "edit.addCursorBelow"
+   ]
+  },
+  {
+   "id": "search",
+   "items": [
+    "edit.find",
+    "edit.replace",
+    "edit.findNext",
+    "edit.findPrev",
+    "edit.findInFiles",
+    "edit.gotoLine",
+    "-",
+    {
+     "id": "search.bookmarks",
+     "items": [
+      "bookmark.toggle",
+      "bookmark.next",
+      "bookmark.prev",
+      "bookmark.clear",
+      "bookmark.invert",
+      "-",
+      "bookmark.fromSearch",
+      "bookmark.copy",
+      "bookmark.cut",
+      "bookmark.delete",
+      "bookmark.deleteUnmarked"
+     ]
+    },
+    {
+     "id": "search.highlight",
+     "items": [
+      "highlight.1",
+      "highlight.2",
+      "highlight.3",
+      "highlight.4",
+      "highlight.5",
+      "-",
+      "highlight.clear"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "view",
+   "items": [
+    "view.palette",
+    "-",
+    "view.wrap",
+    "view.whitespace",
+    "-",
+    "view.zoomIn",
+    "view.zoomOut",
+    "view.zoomReset",
+    "-",
+    "view.nextTab",
+    "view.prevTab"
+   ]
+  },
+  {
+   "id": "language",
+   "items": [
+    "doc.language",
+    "doc.encoding",
+    "doc.eol",
+    "doc.indent",
+    "-",
+    "lang.userLanguages"
+   ]
+  },
+  {
+   "id": "macro",
+   "items": [
+    "macro.record",
+    "macro.play",
+    "macro.playMany",
+    "macro.playToEnd",
+    "-",
+    "macro.save",
+    "macro.runSaved",
+    "macro.deleteSaved"
+   ]
+  },
+  {
+   "id": "help",
+   "items": [
+    "@checkUpdates",
+    "app.about"
+   ]
+  }
+ ]
+}

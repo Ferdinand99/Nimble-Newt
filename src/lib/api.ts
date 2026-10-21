@@ -31,6 +31,7 @@ export interface TabMeta {
   scrollTop: number;
   scrollLeft: number;
   savedMtimeMs: number | null;
+  bookmarks?: number[];
 }
 export interface SessionMeta {
   tabs: TabMeta[];

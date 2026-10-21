@@ -102,6 +102,10 @@ async function boot(): Promise<void> {
 
   onUpdateAvailable((v) => status.setUpdate(v, () => void showAvailable()));
   startAutoUpdates();
+  // Custom languages load after the first paint; open tabs pick them up when they are registered.
+  void import("./lib/userLanguageStore").then((m) => m.loadUserLanguages())
+    .then(() => workspace.redetectLanguages())
+    .catch(() => {});
   void workspace.checkExternal();
 }
 

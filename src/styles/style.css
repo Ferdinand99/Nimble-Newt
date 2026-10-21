@@ -764,12 +764,104 @@ dialog {
 /* 10. Editor ------------------------------------------------------------------- */
 .workspace {
   position: relative;
+  display: flex;
   min-height: 0;
   background: var(--bg);
+}
+.editor-col {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 #editor,
 #editor .cm-editor {
   height: 100%;
+}
+.side {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: var(--side-w, 260px);
+  min-width: 160px;
+  max-width: 60vw;
+  background: var(--bg-2);
+}
+.side-left {
+  border-inline-end: 1px solid var(--line);
+}
+.side-right {
+  border-inline-start: 1px solid var(--line);
+}
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.side-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.side-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.side-left .side-resize {
+  inset-inline-end: -4px;
+}
+.side-right .side-resize {
+  inset-inline-start: -4px;
+}
+.side-resize:hover,
+.side-resize:focus-visible,
+.side-resize.active {
+  background: var(--brand-ring);
+}
+.side-resize:focus-visible {
+  outline: none;
+}
+.cm-bookmark {
+  display: block;
+  width: 9px;
+  height: 9px;
+  margin: 7px 0 0 4px;
+  border-radius: 50%;
+  background: var(--info);
+}
+.workspace .cm-editor .cm-bookmark-gutter {
+  width: 18px;
+  cursor: pointer;
+}
+.workspace .cm-editor .cm-hl {
+  border-radius: 2px;
+}
+.workspace .cm-editor .cm-hl-1 {
+  background: color-mix(in srgb, var(--pal-yellow) 45%, transparent);
+}
+.workspace .cm-editor .cm-hl-2 {
+  background: color-mix(in srgb, var(--pal-green) 38%, transparent);
+}
+.workspace .cm-editor .cm-hl-3 {
+  background: color-mix(in srgb, var(--pal-cyan) 38%, transparent);
+}
+.workspace .cm-editor .cm-hl-4 {
+  background: color-mix(in srgb, var(--pal-pink) 32%, transparent);
+}
+.workspace .cm-editor .cm-hl-5 {
+  background: color-mix(in srgb, var(--pal-orange) 40%, transparent);
 }
 .workspace .cm-editor {
   background: var(--bg);
@@ -1060,6 +1152,21 @@ dialog {
   color: var(--brand);
   font-weight: 600;
 }
+.status-rec {
+  background: var(--bad-fill);
+  color: var(--bad-text);
+  font-weight: 600;
+}
+.status-rec::before {
+  content: "●";
+  margin-inline-end: 5px;
+  animation: blink 1.4s ease-in-out infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.35;
+  }
+}
 .status-update:hover {
   background: var(--brand-ring);
   color: var(--brand);
@@ -1138,6 +1245,9 @@ dialog {
   .toast {
     animation: none;
     transform: none !important;
+  }
+  .status-rec::before {
+    animation: none;
   }
   .switch-ui::after,
   .tab.shifting,

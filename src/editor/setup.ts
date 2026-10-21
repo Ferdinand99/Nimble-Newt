@@ -1,4 +1,4 @@
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { closeBrackets, closeBracketsKeymap, deleteBracketPair } from "@codemirror/autocomplete";
 import { defaultKeymap, deleteLine, history, indentWithTab, insertBlankLine, moveLineDown, moveLineUp, copyLineDown, toggleComment, toggleBlockComment, undo, redo } from "@codemirror/commands";
 import { bracketMatching, foldGutter, foldKeymap, indentOnInput, indentUnit, type LanguageSupport } from "@codemirror/language";
 import { highlightSelectionMatches, search, selectNextOccurrence } from "@codemirror/search";
@@ -6,7 +6,10 @@ import { Compartment, EditorSelection, EditorState, type Extension, type Text } 
 import { crosshairCursor, drawSelection, dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter, highlightSpecialChars, keymap, lineNumbers, rectangularSelection } from "@codemirror/view";
 import type { LanguageDef } from "../lib/languages";
 import { addCursorAbove, addCursorBelow, columnSelect } from "./commands";
+import { bookmarkExtension } from "./bookmarks";
 import { createFindPanel } from "./findpanel";
+import { highlightExtension } from "./highlights";
+import { recordable, recordingExtension, registerMacroCommand } from "./macroRecorder";
 import { highlighting } from "./theme";
 import { whitespace } from "./whitespace";
 
@@ -28,7 +31,17 @@ export function onEditorUpdate(fn: typeof updateHandler): void {
   updateHandler = fn;
 }
 
-const editorKeymap = keymap.of([
+// Commands that macros can replay by name.
+registerMacroCommand("selectNextOccurrence", selectNextOccurrence);
+registerMacroCommand("deleteBracketPair", deleteBracketPair);
+registerMacroCommand("addCursorAbove", addCursorAbove);
+registerMacroCommand("addCursorBelow", addCursorBelow);
+const colUp = registerMacroCommand("columnSelectUp", columnSelect(0, -1));
+const colDown = registerMacroCommand("columnSelectDown", columnSelect(0, 1));
+const colLeft = registerMacroCommand("columnSelectLeft", columnSelect(-1, 0));
+const colRight = registerMacroCommand("columnSelectRight", columnSelect(1, 0));
+
+const editorKeymap = keymap.of(recordable([
   { key: "Mod-d", run: selectNextOccurrence, preventDefault: true },
   { key: "Mod-/", run: toggleComment, preventDefault: true },
   { key: "Mod-Shift-a", run: toggleBlockComment, preventDefault: true },
@@ -39,12 +52,12 @@ const editorKeymap = keymap.of([
   { key: "Mod-Enter", run: insertBlankLine, preventDefault: true },
   { key: "Mod-Alt-ArrowUp", run: addCursorAbove, preventDefault: true },
   { key: "Mod-Alt-ArrowDown", run: addCursorBelow, preventDefault: true },
-  { key: "Alt-Shift-ArrowUp", run: columnSelect(0, -1), preventDefault: true },
-  { key: "Alt-Shift-ArrowDown", run: columnSelect(0, 1), preventDefault: true },
-  { key: "Alt-Shift-ArrowLeft", run: columnSelect(-1, 0), preventDefault: true },
-  { key: "Alt-Shift-ArrowRight", run: columnSelect(1, 0), preventDefault: true },
+  { key: "Alt-Shift-ArrowUp", run: colUp, preventDefault: true },
+  { key: "Alt-Shift-ArrowDown", run: colDown, preventDefault: true },
+  { key: "Alt-Shift-ArrowLeft", run: colLeft, preventDefault: true },
+  { key: "Alt-Shift-ArrowRight", run: colRight, preventDefault: true },
   indentWithTab,
-]);
+]));
 
 const base: Extension = [
   lineNumbers(),
@@ -65,7 +78,10 @@ const base: Extension = [
   crosshairCursor(),
   search({ top: true, createPanel: createFindPanel }),
   editorKeymap,
-  keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...foldKeymap]),
+  keymap.of(recordable([...closeBracketsKeymap, ...defaultKeymap, ...foldKeymap])),
+  recordingExtension,
+  bookmarkExtension,
+  highlightExtension,
   EditorView.updateListener.of((u) => updateHandler(u)),
   EditorView.contentAttributes.of({ "aria-label": "Editor", spellcheck: "false", autocorrect: "off", autocapitalize: "off" }),
 ];

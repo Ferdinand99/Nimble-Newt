@@ -1,7 +1,10 @@
 import { copyLineDown, deleteLine, moveLineDown, moveLineUp, redo, selectAll, toggleBlockComment, toggleComment, undo } from "@codemirror/commands";
-import { findNext, findPrevious, openSearchPanel, selectNextOccurrence } from "@codemirror/search";
+import { findNext, findPrevious, getSearchQuery, openSearchPanel, selectNextOccurrence } from "@codemirror/search";
 import type { EditorView } from "@codemirror/view";
+import { addBookmarkLines, bookmarkedLines, bookmarkedText, clearBookmarks, invertBookmarks, jumpBookmark, removeLines, toggleBookmarkAt } from "../editor/bookmarks";
 import { addCursorAbove, addCursorBelow } from "../editor/commands";
+import { clearHighlights, textToHighlight, toggleHighlight } from "../editor/highlights";
+import { recorder } from "../editor/macroRecorder";
 import { requestReplaceRow } from "../editor/findpanel";
 import { ENCODINGS, EOLS } from "../lib/api";
 import { isMac } from "../lib/dom";
@@ -14,7 +17,8 @@ import { showMenu } from "../ui/menu";
 import { quickPick } from "../ui/palette";
 import { openSettings } from "../ui/settings";
 import { toast } from "../ui/toast";
-import { accelFor, COMMAND_DEFS } from "./commandDefs";
+import { accelFor, COMMAND_DEFS, MACRO_COMMANDS } from "./commandDefs";
+import * as macros from "./macros";
 import { checkForUpdates } from "./updater";
 import { workspace } from "./workspace";
 import { LANGUAGES } from "../lib/languages";
@@ -83,6 +87,37 @@ async function pick<T extends string>(title: string, values: readonly T[], label
 
 const active = () => workspace.active;
 
+async function copyBookmarked(cut: boolean): Promise<void> {
+  const v = view();
+  const lines = bookmarkedLines(v.state);
+  if (!lines.length) return void toast(t("bookmark.none"), "info");
+  await navigator.clipboard.writeText(bookmarkedText(v.state));
+  if (cut) removeLines(v, true);
+  toast(t(cut ? "bookmark.removed" : "bookmark.copied", { n: lines.length }), "success");
+}
+
+function bookmarkRemove(removeMarked: boolean): void {
+  const v = view();
+  if (!bookmarkedLines(v.state).length) return void toast(t("bookmark.none"), "info");
+  toast(t("bookmark.removed", { n: removeLines(v, removeMarked) }), "info");
+}
+
+function bookmarkFromSearch(): void {
+  const v = view();
+  const q = getSearchQuery(v.state);
+  if (!q.search || !q.valid) return void toast(t("bookmark.noQuery"), "info");
+  const lines = new Set<number>();
+  const cursor = q.getCursor(v.state);
+  for (let r = cursor.next(); !r.done && lines.size < 50000; r = cursor.next()) lines.add(v.state.doc.lineAt(r.value.from).number);
+  addBookmarkLines(v, [...lines]);
+  toast(t("bookmark.added", { n: lines.size }), "success");
+}
+
+const highlight = (color: number) => () => {
+  const text = textToHighlight(view());
+  if (!toggleHighlight(view(), text, color)) toast(t("highlight.nothing"), "info");
+};
+
 const handlers: Record<string, () => void | Promise<void>> = {
   "file.new": () => void workspace.newDoc(),
   "file.open": () => workspace.openDialog(),
@@ -137,6 +172,30 @@ const handlers: Record<string, () => void | Promise<void>> = {
       { label: t("status.tabs", { n }), run: () => workspace.setIndent(d, { useTabs: true, size: n }) },
     ]), { x: window.innerWidth / 2 - 90, y: window.innerHeight / 3 });
   },
+  "macro.record": () => macros.toggleRecording(),
+  "macro.play": macros.playLast,
+  "macro.playMany": macros.playMany,
+  "macro.playToEnd": macros.playToEnd,
+  "macro.save": macros.saveLast,
+  "macro.runSaved": macros.runSaved,
+  "macro.deleteSaved": macros.deleteSaved,
+  "bookmark.toggle": () => toggleBookmarkAt(view()),
+  "bookmark.next": () => void (jumpBookmark(view(), 1) || toast(t("bookmark.none"), "info")),
+  "bookmark.prev": () => void (jumpBookmark(view(), -1) || toast(t("bookmark.none"), "info")),
+  "bookmark.clear": () => clearBookmarks(view()),
+  "bookmark.invert": () => invertBookmarks(view()),
+  "bookmark.copy": () => copyBookmarked(false),
+  "bookmark.cut": () => copyBookmarked(true),
+  "bookmark.delete": () => bookmarkRemove(true),
+  "bookmark.deleteUnmarked": () => bookmarkRemove(false),
+  "bookmark.fromSearch": bookmarkFromSearch,
+  "highlight.1": highlight(1),
+  "highlight.2": highlight(2),
+  "highlight.3": highlight(3),
+  "highlight.4": highlight(4),
+  "highlight.5": highlight(5),
+  "highlight.clear": () => clearHighlights(view()),
+  "lang.userLanguages": async () => (await import("../ui/userLanguages")).openLanguagesSheet(),
   "app.settings": openSettings,
   "app.checkUpdates": () => checkForUpdates(true),
   "app.about": () => void toast("Nimble Newt — MIT License — github.com/Ferdinand99/Nimble-Newt", "info", 6000),
@@ -152,6 +211,7 @@ export function runCommand(id: string): void {
   const now = performance.now();
   if (lastRun.id === id && now - lastRun.at < 80) return;
   lastRun = { id, at: now };
+  if (recorder.recording && !recorder.playing && MACRO_COMMANDS.has(id)) recorder.push({ t: "cmd", c: id });
   const h = handlers[id];
   if (!h) return;
   void Promise.resolve(h()).catch((e) => toast(String(e), "error"));
@@ -169,3 +229,11 @@ export async function openPalette(): Promise<void> {
     runCommand(id);
   }
 }
+
+/** Runs a command for macro playback: no de-duplication and no recording. */
+macros.initMacros((id) => {
+  const h = handlers[id];
+  if (!h) return false;
+  void Promise.resolve(h()).catch(() => {});
+  return true;
+});

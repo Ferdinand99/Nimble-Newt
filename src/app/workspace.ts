@@ -2,6 +2,7 @@ import { EditorSelection, EditorState, Text, type Extension, type TransactionSpe
 import { EditorView, type ViewUpdate } from "@codemirror/view";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { bookmarkedLines, setBookmarkEffect } from "../editor/bookmarks";
 import { compartments, languageExtension, makeState, onEditorUpdate, reconfigureEffects, type ViewOptions } from "../editor/setup";
 import { api, errorMessage, type Encoding, type Eol, type OpenedFile, type RestoredTab } from "../lib/api";
 import { debounce, h } from "../lib/dom";
@@ -38,6 +39,8 @@ export interface Doc {
   optionsVersion: number;
   /** The document last written to the session store as an unsaved buffer. */
   written: Text | null;
+  /** Bookmarked lines, kept here while the tab's editor state is not loaded. */
+  bookmarks: number[];
 }
 
 export type ChangeKind = "tabs" | "active" | "doc" | "selection" | "settings";
@@ -165,7 +168,7 @@ export class Workspace {
       if (!path && def.id === "plaintext") def = getLanguage(guessLanguage(p.text));
     }
     const state = makeState(p.text, this.viewOptions(indent), [], p.anchor !== undefined ? { anchor: p.anchor, head: p.head ?? p.anchor } : undefined);
-    return {
+    const doc: Doc = {
       id: p.id ?? newId(),
       path,
       title: p.title ?? (path ? basename(path) : nextUntitledName(this.docs.map((d) => d.title), t("tab.untitled"))),
@@ -185,7 +188,10 @@ export class Workspace {
       scrollLeft: p.scrollLeft ?? 0,
       optionsVersion: this.optionsVersion,
       written: null,
+      bookmarks: p.bookmarks ?? [],
     };
+    if (doc.bookmarks.length) doc.state = state.update({ effects: setBookmarkEffect(doc.bookmarks) }).state;
+    return doc;
   }
 
   newDoc(text = ""): Doc {
@@ -278,6 +284,7 @@ export class Workspace {
       const f = await api.openFile(doc.path, settings.value.defaultEol);
       doc.indent = detectIndent(f.text) ?? doc.indent;
       doc.state = makeState(f.text, this.viewOptions(doc.indent), [], { anchor: doc.anchor, head: doc.head });
+      if (doc.bookmarks.length) doc.state = doc.state.update({ effects: setBookmarkEffect(doc.bookmarks) }).state;
       doc.savedDoc = doc.state.doc;
       doc.encoding = f.encoding;
       doc.eol = f.eol;
@@ -314,6 +321,18 @@ export class Workspace {
     this.updateWindowTitle();
     void this.ensureDocLanguage(next);
     this.persist();
+  }
+
+  /** Re-detects the language of open files, e.g. after custom languages were registered. */
+  async redetectLanguages(): Promise<void> {
+    for (const d of this.docs) {
+      if (!d.path || d.langManual) continue;
+      const id = detectLanguage(d.path).id;
+      if (id === d.langId) continue;
+      d.langId = id;
+      if (d.state || d.id === this.activeId) await this.ensureDocLanguage(d);
+    }
+    this.emit("doc");
   }
 
   private async autoDetect(): Promise<void> {
@@ -662,6 +681,7 @@ export class Workspace {
           scrollTop: d.scrollTop,
           scrollLeft: d.scrollLeft,
           savedMtimeMs: d.savedMtime,
+          bookmarks: this.stateOf(d) ? bookmarkedLines(this.stateOf(d)!) : d.bookmarks,
         })),
       });
     } catch (e) {
@@ -685,6 +705,7 @@ export class Workspace {
           langId: m.language ?? undefined, langManual: !!m.language,
           anchor: m.selectionAnchor, head: m.selectionHead,
           scrollTop: m.scrollTop, scrollLeft: m.scrollLeft, savedMtime: m.savedMtimeMs,
+          bookmarks: m.bookmarks ?? [],
         };
         if (m.buffer !== null) {
           let savedDoc: Text | null = null;

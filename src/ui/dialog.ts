@@ -97,3 +97,37 @@ export function promptNumber(title: string, placeholder: string, min: number, ma
     },
   });
 }
+
+/** Asks for a line of text; resolves `null` when cancelled or empty. */
+export function promptText(title: string, placeholder: string, initial = ""): Promise<string | null> {
+  const input = h("input", { class: "input", type: "text", placeholder, "aria-label": title, value: initial, spellcheck: false });
+  return openSheet<string | null>({
+    title,
+    alert: true,
+    body: input,
+    dismissValue: null,
+    choices: [
+      { value: null, label: t("common.cancel") },
+      { value: "", label: t("common.ok"), kind: "primary" },
+    ],
+    onOpen: (dlg, close) => {
+      input.focus();
+      input.select();
+      const submit = () => close(input.value.trim() || null);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submit();
+        }
+      });
+      dlg.querySelector(".btn-primary")?.addEventListener(
+        "click",
+        (e) => {
+          e.stopImmediatePropagation();
+          submit();
+        },
+        true,
+      );
+    },
+  });
+}
