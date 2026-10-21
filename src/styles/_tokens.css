@@ -1,0 +1,191 @@
+/* 2. Tokens --------------------------------------------------------------
+   Colours use light-dark(): the first value is the light theme, the second
+   the dark theme. `color-scheme` on <html> picks one: it follows the system
+   by default, and [data-theme="light" | "dark"] forces either. */
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces */
+  --bg: light-dark(#f5f5f7, #0b0b0d);
+  --bg-2: light-dark(#ececf0, #111113);
+  --card: light-dark(#ffffff, #161618);
+  --card-raised: light-dark(#ffffff, #1c1c1f);
+  --field: light-dark(#ffffff, #1b1b1e);
+  --fill: light-dark(rgba(118, 118, 128, 0.12), rgba(118, 118, 128, 0.22));
+  --fill-2: light-dark(rgba(118, 118, 128, 0.2), rgba(118, 118, 128, 0.32));
+  --hover: light-dark(rgba(0, 0, 0, 0.035), rgba(255, 255, 255, 0.045));
+  --pressed: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.08));
+  --line: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.08));
+  --line-strong: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.14));
+  --control-border: light-dark(rgba(0, 0, 0, 0.22), rgba(255, 255, 255, 0.26));
+
+  /* Materials (translucent chrome) */
+  --bar: light-dark(rgba(245, 245, 247, 0.76), rgba(11, 11, 13, 0.72));
+  --material: light-dark(rgba(255, 255, 255, 0.84), rgba(34, 34, 37, 0.84));
+  --scrim: light-dark(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.55));
+  --blur-bar: blur(20px) saturate(180%);
+  --blur-material: blur(32px) saturate(180%);
+
+  /* Text */
+  --text: light-dark(#1d1d1f, #f5f5f7);
+  --muted: light-dark(#6e6e73, #a1a1a6);
+  --faint: light-dark(#aeaeb2, #6e6e73); /* decorative only: separators, chevrons */
+  --placeholder: light-dark(#8e8e93, #77777c);
+  --on-inverse: light-dark(#ffffff, #0b0b0d);
+
+  /* Brand — links, focus, selection, chart line. Use sparingly. */
+  --brand: light-dark(#6656e8, #8b7dff);
+  --brand-fill: light-dark(rgba(102, 86, 232, 0.1), rgba(139, 125, 255, 0.16));
+  --brand-ring: light-dark(rgba(102, 86, 232, 0.22), rgba(139, 125, 255, 0.32));
+
+  /* Status (Apple system colours). base = dots/bars, -text = readable text, -fill = tint */
+  --ok: light-dark(#34c759, #30d158);
+  --ok-text: light-dark(#1f7a35, #30d158);
+  --ok-fill: light-dark(rgba(52, 199, 89, 0.14), rgba(48, 209, 88, 0.15));
+  --warn: light-dark(#ffcc00, #ffd60a);
+  --warn-text: light-dark(#8f5000, #ffd60a);
+  --warn-fill: light-dark(rgba(255, 204, 0, 0.2), rgba(255, 214, 10, 0.14));
+  --bad: light-dark(#ff3b30, #ff453a);
+  --bad-text: light-dark(#d70015, #ff6961);
+  --bad-fill: light-dark(rgba(255, 59, 48, 0.11), rgba(255, 69, 58, 0.16));
+  --info: light-dark(#007aff, #0a84ff);
+  --info-text: light-dark(#0062cc, #409cff);
+  --info-fill: light-dark(rgba(0, 122, 255, 0.1), rgba(10, 132, 255, 0.18));
+  --neutral: light-dark(#8e8e93, #8e8e93);
+  --neutral-text: light-dark(#6e6e73, #a1a1a6);
+  --neutral-fill: light-dark(rgba(118, 118, 128, 0.14), rgba(118, 118, 128, 0.24));
+
+  /* Palette (tags, provider tiles) — Apple system colours */
+  --pal-red: light-dark(#ff3b30, #ff453a);
+  --pal-orange: light-dark(#ff9500, #ff9f0a);
+  --pal-yellow: light-dark(#ffcc00, #ffd60a);
+  --pal-green: light-dark(#34c759, #30d158);
+  --pal-mint: light-dark(#00c7be, #63e6e2);
+  --pal-teal: light-dark(#30b0c7, #40c8e0);
+  --pal-cyan: light-dark(#32ade6, #64d2ff);
+  --pal-blue: light-dark(#007aff, #0a84ff);
+  --pal-indigo: light-dark(#5856d6, #5e5ce6);
+  --pal-purple: light-dark(#af52de, #bf5af2);
+  --pal-pink: light-dark(#ff2d55, #ff375f);
+  --pal-brown: light-dark(#a2845e, #ac8e68);
+  --pal-gray: light-dark(#8e8e93, #98989d);
+
+  /* Controls */
+  --switch-off: light-dark(#e3e3e8, #39393d);
+  --seg-thumb: light-dark(#ffffff, #5a5a5f);
+  --seg-shadow: light-dark(0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.3));
+  --tooltip-bg: light-dark(#1d1d1f, #f5f5f7);
+  --tooltip-fg: light-dark(#f5f5f7, #1d1d1f);
+  --shimmer: light-dark(rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.06));
+
+  /* Shadows */
+  --shadow-color: light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.5));
+  --shadow-card: 0 1px 2px light-dark(rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0));
+  --shadow-pop: 0 10px 30px -6px var(--shadow-color), 0 2px 6px light-dark(rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.3));
+  --shadow-sheet: 0 30px 80px -20px light-dark(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.8));
+  --shadow-lift: 0 16px 32px -12px light-dark(rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.7)), 0 0 0 1px var(--line);
+
+  /* Type */
+  --font: "InterVariable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Spacing (4px grid, in rem so it scales with the user's text size) */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.25rem;
+  --sp-6: 1.5rem;
+  --sp-8: 2rem;
+  --sp-10: 2.5rem;
+  --sp-12: 3rem;
+  --sp-16: 4rem;
+
+  /* Radii */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 22px;
+  --r-full: 999px;
+
+  /* Layout */
+  --wrap: 1120px;
+  --wrap-narrow: 760px;
+  --gutter: 24px;
+  --topbar-h: 56px;
+  --tabbar-h: 56px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* Writing direction: --dir flips translateX(); --x-start/--x-end stand in for
+     left/right where CSS has no logical keyword (flipped under [dir="rtl"]). */
+  --dir: 1;
+  --x-start: left;
+  --x-end: right;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-press: 120ms;
+  --dur-ui: 200ms;
+  --dur-sheet: 340ms;
+
+  /* Layers */
+  --z-sticky: 10;
+  --z-nav: 50;
+  --z-tabbar: 60;
+  --z-popover: 70;
+  --z-toast: 100;
+  --z-tooltip: 110;
+  --z-skip: 120;
+}
+[dir="rtl"] {
+  --dir: -1;
+  --x-start: right;
+  --x-end: left;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Status mapping — one class sets the trio every status-aware component reads. */
+.status-up,
+.status-success {
+  --status: var(--ok);
+  --status-text: var(--ok-text);
+  --status-fill: var(--ok-fill);
+}
+.status-down,
+.status-danger,
+.status-error {
+  --status: var(--bad);
+  --status-text: var(--bad-text);
+  --status-fill: var(--bad-fill);
+}
+.status-pending,
+.status-warning {
+  --status: var(--warn);
+  --status-text: var(--warn-text);
+  --status-fill: var(--warn-fill);
+  --status-on: #1d1d1f;
+}
+.status-maintenance,
+.status-info {
+  --status: var(--info);
+  --status-text: var(--info-text);
+  --status-fill: var(--info-fill);
+}
+.status-paused,
+.status-unknown,
+.status-none {
+  --status: var(--neutral);
+  --status-text: var(--neutral-text);
+  --status-fill: var(--neutral-fill);
+}

@@ -44,6 +44,7 @@
   "devDependencies": {
     "@eslint/js": "^9",
     "@tauri-apps/cli": "^2",
+    "@types/node": "^26.6.5",
     "eslint": "^9",
     "jsdom": "^26",
     "typescript": "^5.6.0",
