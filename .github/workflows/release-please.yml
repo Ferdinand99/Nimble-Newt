@@ -1,0 +1,218 @@
+# Keeps a release PR open on main (version bump + CHANGELOG from Conventional Commits).
+# Merging it tags vX.Y.Z and creates a DRAFT GitHub release. The draft is only published
+# by the `publish` job after the installers, latest.json and signatures are attached.
+# The release body (the changelog section) becomes the "notes" field of latest.json,
+# i.e. the update changelog shown in the app.
+#
+# Everything runs in this workflow because tags/releases created with GITHUB_TOKEN do
+# not trigger other workflows.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      release_id: ${{ steps.draft.outputs.release_id }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - name: Look up draft release id
+        id: draft
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          id=$(gh api "repos/${{ github.repository }}/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+          if [ -z "$id" ]; then
+            echo "::error::Could not find the release for tag $TAG"
+            exit 1
+          fi
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+
+  preflight:
+    name: Preflight (updater keys)
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - name: Check updater signing setup
+        run: |
+          fail=0
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error title=Missing secret::TAURI_SIGNING_PRIVATE_KEY is empty. Add it (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) as repository secrets; see docs/updates.md."
+            fail=1
+          fi
+          pubkey=$(jq -r '.plugins.updater.pubkey // ""' src-tauri/tauri.conf.json)
+          case "$pubkey" in
+            ""|REPLACE_WITH*)
+              echo "::error title=Placeholder public key::plugins.updater.pubkey in src-tauri/tauri.conf.json is still a placeholder. Replace it with the public key from your signing key pair; see docs/updates.md."
+              fail=1 ;;
+          esac
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Release $TAG was NOT built or published. It remains a DRAFT, so nobody gets a release without update files. Fix the problem above, then follow 'Recovering from a failed release' in docs/updates.md."
+            exit 1
+          fi
+          echo "Updater signing setup looks fine."
+
+  build-release:
+    name: Build release (${{ matrix.name }})
+    needs: [release-please, preflight]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+            args: ""
+            rust_targets: ""
+          - name: macos
+            os: macos-latest
+            args: --target universal-apple-darwin
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+    env:
+      # Indirection so `if:` conditions can test whether a secret is set. These are
+      # exported to the real variable names only in the guarded steps below, so that
+      # unset secrets never show up as empty variables.
+      IN_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      IN_APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      IN_APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      IN_APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      IN_APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      IN_APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+      IN_APPLE_ID: ${{ secrets.APPLE_ID }}
+      IN_APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      IN_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      IN_WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      IN_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Configure macOS signing and notarization
+        if: runner.os == 'macOS' && env.IN_APPLE_CERTIFICATE != ''
+        shell: bash
+        run: |
+          {
+            echo "APPLE_CERTIFICATE=$IN_APPLE_CERTIFICATE"
+            echo "APPLE_CERTIFICATE_PASSWORD=$IN_APPLE_CERTIFICATE_PASSWORD"
+            echo "APPLE_SIGNING_IDENTITY=$IN_APPLE_SIGNING_IDENTITY"
+          } >> "$GITHUB_ENV"
+          if [ -n "$IN_APPLE_API_KEY_CONTENT" ] && [ -n "$IN_APPLE_API_ISSUER" ] && [ -n "$IN_APPLE_API_KEY" ]; then
+            key_path="$RUNNER_TEMP/AuthKey_${IN_APPLE_API_KEY}.p8"
+            printf '%s' "$IN_APPLE_API_KEY_CONTENT" > "$key_path"
+            {
+              echo "APPLE_API_ISSUER=$IN_APPLE_API_ISSUER"
+              echo "APPLE_API_KEY=$IN_APPLE_API_KEY"
+              echo "APPLE_API_KEY_PATH=$key_path"
+            } >> "$GITHUB_ENV"
+            echo "Notarization: App Store Connect API key."
+          elif [ -n "$IN_APPLE_ID" ] && [ -n "$IN_APPLE_PASSWORD" ] && [ -n "$IN_APPLE_TEAM_ID" ]; then
+            {
+              echo "APPLE_ID=$IN_APPLE_ID"
+              echo "APPLE_PASSWORD=$IN_APPLE_PASSWORD"
+              echo "APPLE_TEAM_ID=$IN_APPLE_TEAM_ID"
+            } >> "$GITHUB_ENV"
+            echo "Notarization: Apple ID."
+          else
+            echo "::warning::Apple certificate present but no notarization credentials; the app will be signed but not notarized."
+          fi
+
+      - name: Import Windows certificate
+        if: runner.os == 'Windows' && env.IN_WINDOWS_CERTIFICATE != ''
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:IN_WINDOWS_CERTIFICATE))
+          $pw = ConvertTo-SecureString $env:IN_WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pw
+          Remove-Item $pfx
+          $cfg = @{ bundle = @{ windows = @{
+            certificateThumbprint = $cert.Thumbprint
+            digestAlgorithm = 'sha256'
+            timestampUrl = 'http://timestamp.digicert.com'
+          } } } | ConvertTo-Json -Depth 5
+          $cfgPath = Join-Path $env:RUNNER_TEMP 'tauri-windows-sign.json'
+          Set-Content -Path $cfgPath -Value $cfg -Encoding utf8
+          "TAURI_EXTRA_ARGS=--config `"$($cfgPath -replace '\\','/')`"" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Imported certificate with thumbprint $($cert.Thumbprint)"
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          # The release body (changelog written by release-please) is used as the
+          # `notes` of latest.json.
+          releaseId: ${{ needs.release-please.outputs.release_id }}
+          tagName: ${{ needs.release-please.outputs.tag_name }}
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }} ${{ env.TAURI_EXTRA_ARGS }}
+
+  publish:
+    name: Publish release
+    needs: [release-please, build-release]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+      RELEASE_ID: ${{ needs.release-please.outputs.release_id }}
+    steps:
+      - name: Verify update assets
+        run: |
+          assets=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID" --jq '.assets[].name')
+          echo "$assets"
+          if ! grep -qx 'latest.json' <<< "$assets"; then
+            echo "::error::Release $TAG has no latest.json asset; leaving it as a draft."
+            exit 1
+          fi
+          if ! grep -q '\.sig$' <<< "$assets"; then
+            echo "::error::Release $TAG has no .sig asset (updater signatures); leaving it as a draft."
+            exit 1
+          fi
+      - name: Publish release
+        run: |
+          gh api -X PATCH "repos/${{ github.repository }}/releases/$RELEASE_ID" \
+            -F draft=false -f make_latest=true
+          echo "Published $TAG."
