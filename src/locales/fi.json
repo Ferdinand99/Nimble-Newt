@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Mitään ei tallennettu.",
  "macro.recorded": "Makro tallennettu ({n} vaihetta). Toista se näppäimellä {key}.",
  "macro.noMacro": "Tallenna ensin makro.",
+ "macro.notRecorded": "Ei mukana makrossa: komento kysyy syötettä.",
  "macro.played": "Makro suoritettiin {n} kertaa.",
  "macro.playedEnd": "Makro suoritettiin {n} kertaa tiedoston loppuun asti.",
  "macro.stoppedFailed": "Makro pysähtyi {n} suorituksen jälkeen: yhtä vaihetta ei voitu suorittaa.",

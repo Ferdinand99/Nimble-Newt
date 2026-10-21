@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Nothing was recorded.",
  "macro.recorded": "Macro recorded ({n} steps). Play it with {key}.",
  "macro.noMacro": "Record a macro first.",
+ "macro.notRecorded": "Not included in the macro: this command asks for input.",
  "macro.played": "Macro ran {n} times.",
  "macro.playedEnd": "Macro ran {n} times, to the end of the file.",
  "macro.stoppedFailed": "Macro stopped after {n} runs: a step could not run.",

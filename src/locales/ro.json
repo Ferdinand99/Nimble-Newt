@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Nu s-a înregistrat nimic.",
  "macro.recorded": "Macro înregistrat (pași: {n}). Rulează-l cu {key}.",
  "macro.noMacro": "Înregistrează mai întâi un macro.",
+ "macro.notRecorded": "Nu este inclusă în macro: această comandă cere o intrare.",
  "macro.played": "Macroul a rulat de {n} ori.",
  "macro.playedEnd": "Macroul a rulat de {n} ori, până la sfârșitul fișierului.",
  "macro.stoppedFailed": "Macroul s-a oprit după {n} rulări: un pas nu a putut fi executat.",

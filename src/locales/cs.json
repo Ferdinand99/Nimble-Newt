@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Nic se nenahrálo.",
  "macro.recorded": "Makro nahráno (kroky: {n}). Přehrajete ho pomocí {key}.",
  "macro.noMacro": "Nejprve nahrajte makro.",
+ "macro.notRecorded": "Do makra se nezaznamená: tento příkaz se ptá na vstup.",
  "macro.played": "Makro proběhlo, počet spuštění: {n}.",
  "macro.playedEnd": "Makro proběhlo do konce souboru, počet spuštění: {n}.",
  "macro.stoppedFailed": "Makro se zastavilo po spuštěních: {n}. Jeden krok nešlo provést.",

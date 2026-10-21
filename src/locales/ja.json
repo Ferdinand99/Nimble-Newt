@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "記録された操作はありません。",
  "macro.recorded": "マクロを記録しました ({n} ステップ)。{key} で再生できます。",
  "macro.noMacro": "先にマクロを記録してください。",
+ "macro.notRecorded": "マクロには含まれません。このコマンドは入力を求めます。",
  "macro.played": "マクロを {n} 回実行しました。",
  "macro.playedEnd": "マクロをファイルの末尾まで {n} 回実行しました。",
  "macro.stoppedFailed": "マクロは {n} 回実行後に停止しました: 実行できないステップがありました。",

@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Intet blev optaget.",
  "macro.recorded": "Makro optaget ({n} trin). Afspil den med {key}.",
  "macro.noMacro": "Optag først en makro.",
+ "macro.notRecorded": "Indgår ikke i makroen: kommandoen beder om input.",
  "macro.played": "Makroen blev kørt {n} gange.",
  "macro.playedEnd": "Makroen blev kørt {n} gange til filens slutning.",
  "macro.stoppedFailed": "Makroen stoppede efter {n} kørsler: Et trin kunne ikke køres.",

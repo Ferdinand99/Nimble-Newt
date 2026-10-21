@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "לא הוקלט דבר.",
  "macro.recorded": "המאקרו הוקלט ({n} שלבים). להפעלה: {key}.",
  "macro.noMacro": "קודם יש להקליט מאקרו.",
+ "macro.notRecorded": "לא נכלל במאקרו: הפקודה הזו מבקשת קלט.",
  "macro.played": "המאקרו הורץ {n} פעמים.",
  "macro.playedEnd": "המאקרו הורץ {n} פעמים, עד סוף הקובץ.",
  "macro.stoppedFailed": "המאקרו נעצר לאחר {n} הרצות: שלב אחד לא הצליח לרוץ.",

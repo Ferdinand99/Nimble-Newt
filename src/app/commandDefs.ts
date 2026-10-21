@@ -65,3 +65,6 @@ export const MENU: { id: string; items: MenuNode[] }[] = data.menu as { id: stri
 
 /** Ids of commands that are recorded when a macro is being recorded. */
 export const MACRO_COMMANDS = new Set(COMMAND_DEFS.filter((c) => c.macro).map((c) => c.id));
+
+/** Commands that ask the user for input: they run while recording but are not recorded (they would prompt on every pass). */
+export const MACRO_NOT_RECORDED = new Set(["lineop.splitAt", "lineop.prefix", "lineop.suffix"]);

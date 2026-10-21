@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Ingenting ble tatt opp.",
  "macro.recorded": "Makro tatt opp ({n} steg). Spill den av med {key}.",
  "macro.noMacro": "Ta opp en makro først.",
+ "macro.notRecorded": "Tas ikke med i makroen: kommandoen ber om input.",
  "macro.played": "Makroen kjørte {n} ganger.",
  "macro.playedEnd": "Makroen kjørte {n} ganger, til slutten av fila.",
  "macro.stoppedFailed": "Makroen stoppet etter {n} kjøringer: et steg kunne ikke kjøres.",

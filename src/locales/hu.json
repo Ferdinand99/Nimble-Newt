@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Nem lett semmi rögzítve.",
  "macro.recorded": "Makró rögzítve ({n} lépés). Lejátszás: {key}.",
  "macro.noMacro": "Előbb rögzítsen egy makrót.",
+ "macro.notRecorded": "Nem kerül a makróba: ez a parancs bemenetet kér.",
  "macro.played": "A makró {n} alkalommal lefutott.",
  "macro.playedEnd": "A makró {n} alkalommal lefutott, a fájl végéig.",
  "macro.stoppedFailed": "A makró {n} futás után leállt: egy lépést nem lehetett végrehajtani.",

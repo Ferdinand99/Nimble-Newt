@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Inget spelades in.",
  "macro.recorded": "Makrot spelades in ({n} steg). Spela upp det med {key}.",
  "macro.noMacro": "Spela in ett makro först.",
+ "macro.notRecorded": "Ingår inte i makrot: kommandot ber om inmatning.",
  "macro.played": "Makrot kördes {n} gånger.",
  "macro.playedEnd": "Makrot kördes {n} gånger, till filens slut.",
  "macro.stoppedFailed": "Makrot stoppades efter {n} körningar: ett steg kunde inte köras.",

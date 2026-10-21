@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Nic nie nagrano.",
  "macro.recorded": "Nagrano makro (kroki: {n}). Odtwórz je skrótem {key}.",
  "macro.noMacro": "Najpierw nagraj makro.",
+ "macro.notRecorded": "Nie zostanie dodane do makra: to polecenie prosi o dane.",
  "macro.played": "Makro uruchomiono razy: {n}.",
  "macro.playedEnd": "Makro uruchomiono razy: {n}, aż do końca pliku.",
  "macro.stoppedFailed": "Makro zatrzymano po uruchomieniach: {n}. Nie udało się wykonać kroku.",

@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Es wurde nichts aufgenommen.",
  "macro.recorded": "Makro aufgenommen ({n} Schritte). Mit {key} abspielen.",
  "macro.noMacro": "Nimm zuerst ein Makro auf.",
+ "macro.notRecorded": "Nicht im Makro enthalten: Dieser Befehl fragt nach einer Eingabe.",
  "macro.played": "Das Makro wurde {n}-mal ausgeführt.",
  "macro.playedEnd": "Das Makro wurde {n}-mal bis zum Dateiende ausgeführt.",
  "macro.stoppedFailed": "Das Makro wurde nach {n} Durchläufen gestoppt: Ein Schritt ließ sich nicht ausführen.",

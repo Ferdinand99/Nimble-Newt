@@ -20,7 +20,7 @@ import { showMenu } from "../ui/menu";
 import { quickPick } from "../ui/palette";
 import { toast } from "../ui/toast";
 import { extensionCommands, isExtensionCommand } from "../ext/registry";
-import { accelFor, COMMAND_DEFS, MACRO_COMMANDS } from "./commandDefs";
+import { accelFor, COMMAND_DEFS, MACRO_COMMANDS, MACRO_NOT_RECORDED } from "./commandDefs";
 import * as macros from "./macros";
 import { checkForUpdates } from "./updater";
 import { workspace } from "./workspace";
@@ -263,7 +263,10 @@ export function runCommand(id: string): void {
     void import("../ext/host").then((m) => m.runExtensionCommand(id));
     return;
   }
-  if (recorder.recording && !recorder.playing && MACRO_COMMANDS.has(id)) recorder.push({ t: "cmd", c: id });
+  if (recorder.recording && !recorder.playing) {
+    if (MACRO_COMMANDS.has(id)) recorder.push({ t: "cmd", c: id });
+    else if (MACRO_NOT_RECORDED.has(id)) toast(t("macro.notRecorded"), "info");
+  }
   const h = handlers[id];
   if (!h) return;
   void Promise.resolve(h()).catch((e) => toast(String(e), "error"));

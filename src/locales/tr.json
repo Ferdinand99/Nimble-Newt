@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Hiçbir şey kaydedilmedi.",
  "macro.recorded": "Makro kaydedildi ({n} adım). {key} ile oynatın.",
  "macro.noMacro": "Önce bir makro kaydedin.",
+ "macro.notRecorded": "Makroya eklenmedi: bu komut girdi istiyor.",
  "macro.played": "Makro {n} kez çalıştı.",
  "macro.playedEnd": "Makro {n} kez çalıştı, dosya sonuna kadar.",
  "macro.stoppedFailed": "Makro {n} çalıştırmadan sonra durdu: bir adım çalıştırılamadı.",

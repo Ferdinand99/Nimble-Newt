@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "沒有錄製任何內容。",
  "macro.recorded": "巨集已錄製（{n} 個步驟）。按 {key} 播放。",
  "macro.noMacro": "請先錄製巨集。",
+ "macro.notRecorded": "未包含在巨集中：此命令需要輸入。",
  "macro.played": "巨集已執行 {n} 次。",
  "macro.playedEnd": "巨集已執行 {n} 次，直到檔案結尾。",
  "macro.stoppedFailed": "巨集在執行 {n} 次後停止：有一個步驟無法執行。",

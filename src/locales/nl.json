@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Er is niets opgenomen.",
  "macro.recorded": "Macro opgenomen ({n} stappen). Speel hem af met {key}.",
  "macro.noMacro": "Neem eerst een macro op.",
+ "macro.notRecorded": "Niet opgenomen in de macro: dit commando vraagt om invoer.",
  "macro.played": "Macro {n} keer uitgevoerd.",
  "macro.playedEnd": "Macro {n} keer uitgevoerd, tot het einde van het bestand.",
  "macro.stoppedFailed": "Macro gestopt na {n} uitvoeringen: een stap kon niet worden uitgevoerd.",

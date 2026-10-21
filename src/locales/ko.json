@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "녹화된 내용이 없어요.",
  "macro.recorded": "매크로를 녹화했어요 ({n}단계). 실행 단축키: {key}",
  "macro.noMacro": "먼저 매크로를 녹화하세요.",
+ "macro.notRecorded": "매크로에 포함되지 않음: 이 명령은 입력을 요청합니다.",
  "macro.played": "매크로를 {n}번 실행했어요.",
  "macro.playedEnd": "매크로를 {n}번 실행해 파일 끝까지 갔어요.",
  "macro.stoppedFailed": "{n}번 실행 후 매크로가 멈췄어요. 실행할 수 없는 단계가 있어요.",

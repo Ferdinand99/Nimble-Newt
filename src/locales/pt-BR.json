@@ -266,6 +266,7 @@
  "macro.nothingRecorded": "Nada foi gravado.",
  "macro.recorded": "Macro gravada ({n} passos). Execute com {key}.",
  "macro.noMacro": "Grave uma macro primeiro.",
+ "macro.notRecorded": "Não incluído na macro: este comando pede uma entrada.",
  "macro.played": "A macro foi executada {n} vezes.",
  "macro.playedEnd": "A macro foi executada {n} vezes, até o fim do arquivo.",
  "macro.stoppedFailed": "A macro parou após {n} execuções: um passo não pôde ser executado.",
