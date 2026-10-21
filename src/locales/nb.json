@@ -227,5 +227,9 @@
  "cmd.app.settings": "Innstillinger …",
  "cmd.app.checkUpdates": "Se etter oppdateringer …",
  "cmd.app.about": "Om Nimble Newt",
- "find.results": "{n} treff"
+ "find.results": "{n} treff",
+ "conflict.title": "«{name}» er endret på disk",
+ "conflict.message": "Å lagre nå overskriver endringer gjort av et annet program. Vil du overskrive dem med din versjon, eller laste filen på nytt og miste endringene i denne fanen?",
+ "conflict.reload": "Last inn på nytt",
+ "conflict.overwrite": "Overskriv"
 }

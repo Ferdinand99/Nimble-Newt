@@ -227,5 +227,9 @@
  "cmd.app.settings": "Settings…",
  "cmd.app.checkUpdates": "Check for Updates…",
  "cmd.app.about": "About Nimble Newt",
- "find.results": "{n} results"
+ "find.results": "{n} results",
+ "conflict.title": "“{name}” changed on disk",
+ "conflict.message": "Saving now would overwrite changes made by another program. Overwrite them with your version, or reload the file and lose your changes in this tab?",
+ "conflict.reload": "Reload",
+ "conflict.overwrite": "Overwrite"
 }

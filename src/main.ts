@@ -9,6 +9,7 @@ import { workspace } from "./app/workspace";
 import { api, errorMessage } from "./lib/api";
 import { isMac } from "./lib/dom";
 import { setLocale, t } from "./lib/i18n";
+import { PathInbox } from "./lib/pathInbox";
 import { applyTheme, settings } from "./lib/settings";
 import { openSettings } from "./ui/settings";
 import { initStatusbar } from "./ui/statusbar";
@@ -41,6 +42,10 @@ const stages: Record<string, number> = { scriptStart: Math.round(performance.now
 const mark = (name: string) => (stages[name] = Math.round(performance.now()));
 
 async function boot(): Promise<void> {
+  // Listen before asking for pending paths: the backend switches from queueing to emitting events
+  // the moment we take the queue, and events that arrive while we still start up must not be lost.
+  const inbox = new PathInbox();
+  await listen<string[]>("open-paths", (e) => inbox.push(e.payload));
   const root = document.documentElement;
   root.classList.add(isMac ? "mac" : "win");
 
@@ -90,6 +95,7 @@ async function boot(): Promise<void> {
 
   wireShortcuts();
   wireWindow();
+  inbox.attach((paths) => void workspace.openPaths(paths));
   document.getElementById("new-tab")!.addEventListener("click", () => {});
   document.getElementById("open-palette")!.addEventListener("click", () => void openPalette());
   document.getElementById("open-settings")!.addEventListener("click", () => void openSettings());
@@ -125,7 +131,6 @@ function wireShortcuts(): void {
 
 function wireWindow(): void {
   void listen<string>("menu", (e) => runCommand(e.payload));
-  void listen<string[]>("open-paths", (e) => void workspace.openPaths(e.payload));
 
   const overlay = document.getElementById("drop-overlay")!;
   overlay.textContent = t("drop.hint");

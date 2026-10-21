@@ -11,7 +11,6 @@ use nimble_core::session::{RestoredSession, SessionMeta, SessionStore};
 use nimble_core::update::{self, UpdateErrorKind};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use tauri::ipc::Channel;
@@ -20,10 +19,35 @@ use tauri_plugin_updater::UpdaterExt;
 
 static START: OnceLock<Instant> = OnceLock::new();
 
+/// Paths handed to us before the frontend is listening. `ready` and the queue share one lock,
+/// so a path can never slip in between "is the frontend ready?" and "take the queue".
 #[derive(Default)]
-struct Pending {
-    paths: Mutex<Vec<String>>,
-    ready: AtomicBool,
+struct Pending(Mutex<PendingInner>);
+
+#[derive(Default)]
+struct PendingInner {
+    ready: bool,
+    paths: Vec<String>,
+}
+
+impl Pending {
+    /// Returns the paths to emit now when the frontend is ready, otherwise queues them.
+    fn deliver(&self, paths: Vec<String>) -> Option<Vec<String>> {
+        let mut inner = self.0.lock().unwrap();
+        if inner.ready {
+            Some(paths)
+        } else {
+            inner.paths.extend(paths);
+            None
+        }
+    }
+
+    /// Marks the frontend ready and returns everything queued so far.
+    fn take(&self) -> Vec<String> {
+        let mut inner = self.0.lock().unwrap();
+        inner.ready = true;
+        std::mem::take(&mut inner.paths)
+    }
 }
 
 #[derive(Default)]
@@ -51,14 +75,33 @@ async fn open_file_as(
     fileio::read_as(Path::new(&path), encoding, default_eol).map_err(err)
 }
 
+#[derive(Serialize)]
+struct SaveFailure {
+    /// `conflict`: the file changed on disk after it was opened; anything else is `other`.
+    kind: &'static str,
+    message: String,
+}
+
+/// `expected_mtime_ms` is the modification time the editor last saw; a different time on disk
+/// is refused as a conflict. Pass `None` for new files, "Save As" and a confirmed overwrite.
 #[tauri::command]
 async fn save_file(
     path: String,
     text: String,
     encoding: TextEncoding,
     eol: Eol,
-) -> CmdResult<WriteResult> {
-    fileio::write(Path::new(&path), &text, encoding, eol).map_err(err)
+    expected_mtime_ms: Option<i64>,
+) -> Result<WriteResult, SaveFailure> {
+    fileio::write_checked(Path::new(&path), &text, encoding, eol, expected_mtime_ms).map_err(|e| {
+        SaveFailure {
+            kind: if matches!(e, nimble_core::Error::Conflict(_)) {
+                "conflict"
+            } else {
+                "other"
+            },
+            message: e.to_string(),
+        }
+    })
 }
 
 /// Modification time per path in ms, `None` when the file is gone. Used for external-change detection.
@@ -134,8 +177,7 @@ async fn replace_in_folder(
 /// Paths passed on the command line or by the OS before the frontend was ready.
 #[tauri::command]
 fn take_pending_paths(pending: State<'_, Pending>) -> Vec<String> {
-    pending.ready.store(true, Ordering::SeqCst);
-    std::mem::take(&mut *pending.paths.lock().unwrap())
+    pending.take()
 }
 
 #[tauri::command]
@@ -289,11 +331,8 @@ fn deliver_paths(app: &AppHandle, paths: Vec<String>) {
     if paths.is_empty() {
         return;
     }
-    let pending = app.state::<Pending>();
-    if pending.ready.load(Ordering::SeqCst) {
-        let _ = app.emit("open-paths", paths);
-    } else {
-        pending.paths.lock().unwrap().extend(paths);
+    if let Some(now) = app.state::<Pending>().deliver(paths) {
+        let _ = app.emit("open-paths", now);
     }
 }
 
@@ -327,7 +366,7 @@ pub fn run() {
                 std::env::args().skip(1),
                 std::env::current_dir().ok().as_deref(),
             );
-            app.state::<Pending>().paths.lock().unwrap().extend(args);
+            app.state::<Pending>().deliver(args);
             app.set_menu(menu::build(app.handle(), "en")?)?;
             // The window starts hidden and the frontend shows it when ready. If the frontend never
             // gets that far, show it anyway so the user is not left with an invisible process.
@@ -393,6 +432,39 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn paths_before_ready_are_queued_and_taken_once() {
+        let p = Pending::default();
+        assert_eq!(p.deliver(vec!["a".into(), "b".into()]), None);
+        assert_eq!(p.deliver(vec!["c".into()]), None);
+        assert_eq!(p.take(), vec!["a", "b", "c"]);
+        assert!(p.take().is_empty());
+    }
+
+    #[test]
+    fn paths_after_ready_are_emitted_immediately() {
+        let p = Pending::default();
+        p.take();
+        assert_eq!(p.deliver(vec!["x".into()]), Some(vec!["x".to_string()]));
+        assert!(p.take().is_empty());
+    }
+
+    #[test]
+    fn concurrent_delivery_never_loses_a_path() {
+        use std::sync::Arc;
+        for _ in 0..200 {
+            let p = Arc::new(Pending::default());
+            let sender = {
+                let p = p.clone();
+                std::thread::spawn(move || p.deliver(vec!["late".into()]))
+            };
+            let taken = p.take();
+            let emitted = sender.join().unwrap();
+            // Either the frontend got it from the queue or it is emitted as an event; never neither.
+            assert!(taken.contains(&"late".to_string()) ^ emitted.is_some());
+        }
+    }
 
     #[test]
     fn only_existing_files_are_accepted() {

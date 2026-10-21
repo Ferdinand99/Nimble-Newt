@@ -8,6 +8,7 @@ import { debounce, h } from "../lib/dom";
 import { t } from "../lib/i18n";
 import { detectFromShebang, detectLanguage, getLanguage, type LanguageDef } from "../lib/languages";
 import { basename, detectIndent, nextUntitledName, pushRecent, type Indent } from "../lib/logic";
+import { expectedMtime, isConflict } from "../lib/saveConflict";
 import { settings } from "../lib/settings";
 import { confirmSheet, openSheet } from "../ui/dialog";
 import { toast } from "../ui/toast";
@@ -357,13 +358,17 @@ export class Workspace {
 
   // ---- saving ------------------------------------------------------------------
 
-  async save(doc: Doc): Promise<boolean> {
+  /**
+   * Saves a tab. Unless `skipCheck` is set, the backend refuses to overwrite a file that changed on disk
+   * since it was opened; the user then chooses between overwriting and reloading.
+   */
+  async save(doc: Doc, skipCheck = false): Promise<boolean> {
     if (!doc.path) return this.saveAs(doc);
     const st = this.stateOf(doc);
     if (!st) return true;
     const snapshot = st.doc;
     try {
-      const r = await api.saveFile(doc.path, snapshot.toString(), doc.encoding, doc.eol);
+      const r = await api.saveFile(doc.path, snapshot.toString(), doc.encoding, doc.eol, expectedMtime(doc, skipCheck));
       doc.savedDoc = snapshot;
       doc.savedMtime = r.mtimeMs;
       doc.forceDirty = false;
@@ -374,9 +379,33 @@ export class Workspace {
       this.persist();
       return true;
     } catch (e) {
+      if (isConflict(e)) return this.resolveSaveConflict(doc);
       toast(t("toast.saveFailed", { name: doc.title, error: errorMessage(e) }), "error");
       return false;
     }
+  }
+
+  private async resolveSaveConflict(doc: Doc): Promise<boolean> {
+    const choice = await openSheet<"overwrite" | "reload" | "cancel">({
+      title: t("conflict.title", { name: doc.title }),
+      alert: true,
+      body: h("p", {}, t("conflict.message")),
+      dismissValue: "cancel",
+      choices: [
+        { value: "cancel", label: t("common.cancel") },
+        { value: "reload", label: t("conflict.reload") },
+        { value: "overwrite", label: t("conflict.overwrite"), kind: "danger" },
+      ],
+    });
+    if (choice === "overwrite") return this.save(doc, true);
+    if (choice === "reload") {
+      try {
+        this.replaceContents(doc, await api.openFile(doc.path!, settings.value.defaultEol));
+      } catch (e) {
+        toast(errorMessage(e), "error");
+      }
+    }
+    return false;
   }
 
   async saveAs(doc: Doc): Promise<boolean> {
@@ -389,7 +418,8 @@ export class Workspace {
       const def = detectLanguage(path);
       if (def.id !== doc.langId) await this.setLanguage(doc, def.id, false);
     }
-    if (!(await this.save(doc))) {
+    // A new path has nothing on disk to conflict with (the dialog already confirmed any overwrite).
+    if (!(await this.save(doc, true))) {
       doc.path = prev.path;
       doc.title = prev.title;
       return false;
