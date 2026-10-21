@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ferdinand99.github.io/Nimble-Newt/sitemap.xml
