@@ -1,0 +1,27 @@
+[package]
+name = "nimble-newt"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "A fast, modern text editor for Windows and macOS"
+repository = "https://github.com/Ferdinand99/Nimble-Newt"
+
+[lib]
+name = "nimble_newt_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+nimble-core = { path = "../crates/core" }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+time = "0.3"
+
+[dev-dependencies]
+tempfile = "3"

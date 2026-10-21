@@ -1,0 +1,18 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Nimble Newt",
+        "width": 1100,
+        "height": 740,
+        "minWidth": 480,
+        "minHeight": 320,
+        "visible": false,
+        "dragDropEnabled": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ]
+  }
+}
