@@ -6,6 +6,7 @@ import { compartments, languageExtension, makeState, onEditorUpdate, reconfigure
 import { api, errorMessage, type Encoding, type Eol, type OpenedFile, type RestoredTab } from "../lib/api";
 import { debounce, h } from "../lib/dom";
 import { t } from "../lib/i18n";
+import { guessLanguage } from "../lib/guess";
 import { detectFromShebang, detectLanguage, getLanguage, type LanguageDef } from "../lib/languages";
 import { basename, detectIndent, nextUntitledName, pushRecent, type Indent } from "../lib/logic";
 import { expectedMtime, isConflict } from "../lib/saveConflict";
@@ -67,6 +68,8 @@ export class Workspace {
   private lastSelectionPersist = 0;
 
   readonly persist = debounce(() => void this.persistNow(), 500);
+  /** Re-guesses the language of an untitled tab shortly after typing or pasting stops. */
+  private readonly guess = debounce(() => void this.autoDetect(), 400);
 
   on(fn: Listener): void {
     this.listeners.add(fn);
@@ -138,6 +141,7 @@ export class Workspace {
       doc.missing = false;
       this.emit("doc");
       this.persist();
+      if (!doc.path && !doc.langManual) this.guess();
     } else if (u.selectionSet) {
       this.emit("selection");
       if (Date.now() - this.lastSelectionPersist > 1000) {
@@ -157,6 +161,8 @@ export class Workspace {
     if (!p.langId && def.id === "plaintext") {
       const nl = p.text.indexOf("\n");
       def = detectFromShebang(nl < 0 ? p.text : p.text.slice(0, nl)) ?? def;
+      // Tabs without a file name: guess from the content (never overrides a language chosen by hand).
+      if (!path && def.id === "plaintext") def = getLanguage(guessLanguage(p.text));
     }
     const state = makeState(p.text, this.viewOptions(indent), [], p.anchor !== undefined ? { anchor: p.anchor, head: p.head ?? p.anchor } : undefined);
     return {
@@ -308,6 +314,13 @@ export class Workspace {
     this.updateWindowTitle();
     void this.ensureDocLanguage(next);
     this.persist();
+  }
+
+  private async autoDetect(): Promise<void> {
+    const d = this.active;
+    if (!d || d.path || d.langManual) return;
+    const id = guessLanguage(this.textOf(d));
+    if (id && id !== d.langId) await this.setLanguage(d, id, false);
   }
 
   async ensureDocLanguage(doc: Doc): Promise<void> {
