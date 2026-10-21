@@ -30,6 +30,11 @@ Generated and uploaded by `tauri-action` (`uploadUpdaterJson: true`):
 }
 ```
 
+### Release notes and the lockfile
+
+- `tauri-action` leaves `notes` empty when it uploads to an existing release, so the `publish` job downloads `latest.json`, fills `notes` from the release body (the release-please changelog) with `scripts/update-notes.mjs`, and re-uploads it before the draft is published. That is what the in-app update dialog shows.
+- release-please cannot edit `Cargo.lock`. The `lockfile` job runs `cargo update --workspace` on the release PR branch and pushes a `chore: refresh Cargo.lock for the release` commit when the versions changed. Commits pushed with the default `GITHUB_TOKEN` do not trigger CI, so if you require status checks on the release PR, close and reopen it (or push an empty change) to run them.
+
 ## One-time owner setup
 
 Do this **before merging the first release PR**.
