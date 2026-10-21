@@ -15,6 +15,7 @@ regex = "1"
 globset = "0.4"
 thiserror = "2"
 semver = "1"
+similar = "2"
 toml = "0.8"
 
 [dev-dependencies]
