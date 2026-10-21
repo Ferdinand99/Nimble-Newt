@@ -2,12 +2,14 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
 
-# A branch with an open PR triggers both events; they share a group so only the newest run survives.
+# Pull requests are checked by the pull_request event only, so a push to a PR branch runs CI
+# once (two events would cancel each other and show up as failed checks). A newer push cancels
+# the older run. Feature branches without a PR can be checked with "Run workflow".
 concurrency:
   group: ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
