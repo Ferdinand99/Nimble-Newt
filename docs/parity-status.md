@@ -14,37 +14,38 @@ what is done, what remains, and where to continue. Measurements are from the Lin
 | Start-up, empty profile | about 2.1 s |
 | Start-up, existing profile | about 0.61 s |
 
-## Phase 0: fixes
+## After phase 4 (same method)
 
-- [x] `latest.json` notes: the publish job copies the release body into `notes` (`scripts/update-notes.mjs`, tested).
-- [x] `Cargo.lock`: removed from release-please `extra-files`; a `lockfile` job refreshes it on the release PR branch.
-- [x] Language guessed from the content for tabs without a file name (`src/lib/guess.ts`, 30 tests).
+| | Baseline | Now |
+|---|---|---|
+| Binary | 8.73 MB | 10.76 MB (+2.0 MB: 26 languages embedded for the native menu, encodings, diff, hashes, zip, large files) |
+| JS + CSS in `dist/` | 1.09 MB raw / 375 KB gzip | 2.43 MB raw / 793 KB gzip (mostly lazy chunks: 96 languages, 25 locales, tools, compare, extensions) |
+| Entry chunk | 466 KB raw / 150 KB gzip | 543 KB raw / 175 KB gzip |
+| Start-up, empty profile | about 2.1 s | about 2.0 s |
+| Start-up, existing profile | about 0.61 s | about 0.64 s |
 
-## Phase 1: editing and languages
+## Done
 
-- [x] About 100 languages, lazy-loaded; custom languages in JSON/TOML (import/export, validated in Rust).
-- [x] Macros (record, play, N times, to end of file, named macros).
-- [x] Bookmarks (gutter, navigate, copy/cut/delete bookmarked or unmarked lines, bookmark matches of Find), stored in the session.
-- [x] Highlight all occurrences in five colours.
-- [ ] Column editing with number sequences: dialog done, to be wired and tested end to end.
-- [ ] Line operations (sort, dedupe, trim, case, join/split) wired to commands and menus.
-- [ ] Word completion wired and switchable in settings.
-- [ ] Function list (outline) panel.
+- Phase 0: `latest.json` notes, `Cargo.lock` handling, language guessed from content.
+- Phase 1: about 100 languages (lazy) and custom languages, macros, bookmarks, five highlight colours, column editing with number sequences, line operations, word completion (setting, lazy), function list.
+- Phase 2: 35 legacy code pages with detection, follow file, large-file reader in Rust (indexed, chunked) with a read-only virtual-scrolling viewer, search and go to line.
+- Phase 3: compare (live, apply per hunk; Rust diff for large inputs), split view of the same file, minimap, tools panel (JSON/XML, Base64/URL/HTML/hex, checksums, timestamps, UUIDs), folder as workspace.
+- Phase 4: sandboxed extensions (design in `docs/extensions.md`; Rust manager in `crates/core/src/extensions.rs`; JS host in `src/ext/`; Extensions sheet; three built-in examples) and 26 interface languages with right-to-left support and a coverage test.
 
-## Phase 2: encodings and large files
+## Known limits
 
-- [x] 35 legacy code pages (ISO-8859-x, Windows-125x, KOI8, Shift_JIS, EUC-JP/KR, GBK/GB18030, Big5, ISO-2022-JP) with better detection.
-- [x] Follow file (`tail -f`) for normal tabs.
-- [ ] Large-file reader in Rust (chunked, indexed) and a read-only virtual-scrolling viewer with search and go to line.
+- Split view mirrors the active tab; two different tabs side by side use the compare view.
+- The large-file viewer is read-only; UTF-16 files are not supported there.
+- Compare above about 2 M characters shows a hunk list instead of a side-by-side editor.
+- Extension shortcuts are only proposed (never bound automatically); no catalogue; no panels or access to other files.
+- Built-in extension texts are in English and Norwegian only; other languages see English.
+- The 24 new translations are machine-written and unreviewed by native speakers.
+- Start-up is about 0.64 s in the Linux sandbox, not under 300 ms; Windows/macOS numbers are in the CI summaries.
+- Not tested on a real Windows or macOS machine, only through CI.
 
-## Phase 3: compare and tools
+## Next steps
 
-- [ ] Compare two files/tabs.
-- [ ] Split view and minimap.
-- [ ] Tools panel (JSON/XML format and minify, Base64/URL/HTML, hashes, timestamps, UUID).
-- [ ] Folder as workspace.
-
-## Phase 4: extensions and UI languages
-
-- [ ] Extension design note and a first API with example extensions.
-- [ ] 26 UI languages with a 100 % coverage test.
+1. Native-speaker review of the translations; extend extension texts to more languages.
+2. Extension panels and a read-only `workspace.read` permission (see the open questions in `docs/extensions.md`).
+3. Editing in the large-file viewer; UTF-16 there.
+4. Reduce the entry chunk (move the English table and rarely used editor extensions behind lazy imports).
