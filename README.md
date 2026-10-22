@@ -9,7 +9,7 @@ Notepad++ simplicity, a clean Apple-inspired design, and a small native app buil
 
 [![CI](https://github.com/Ferdinand99/Nimble-Newt/actions/workflows/ci.yml/badge.svg)](https://github.com/Ferdinand99/Nimble-Newt/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Website](https://img.shields.io/badge/website-ferdinand99.github.io%2FNimble--Newt-black.svg)](https://ferdinand99.github.io/Nimble-Newt/)
+[![Website](https://img.shields.io/badge/website-hedgerow.tools%2FNimble--Newt-black.svg)](https://hedgerow.tools/Nimble-Newt/)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/editor-dark.png">
