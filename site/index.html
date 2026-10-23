@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self' 'sha256-WZRJfWvsnNCPcxzZwvyhovnZGqhZaC+8gPGPRbx6wTk='; style-src 'self'; img-src 'self'; font-src 'self'; connect-src https://api.github.com; base-uri 'self'; form-action 'none'"
+      content="default-src 'none'; script-src 'self' 'sha256-WZRJfWvsnNCPcxzZwvyhovnZGqhZaC+8gPGPRbx6wTk=' https://kestrel.hedgerow.tools; style-src 'self'; img-src 'self'; font-src 'self'; connect-src https://api.github.com https://kestrel.hedgerow.tools; base-uri 'self'; form-action 'none'"
     />
     <title>Nimble Newt — a fast, modern text editor for Windows and macOS</title>
     <meta
@@ -59,6 +59,7 @@
       }
     </script>
     <script src="app.js" defer></script>
+    <script defer src="https://kestrel.hedgerow.tools/js/k.js" data-key="90daafcccde19016b43c733b040b6863"></script>
   </head>
   <body>
     <svg width="0" height="0" class="vh" aria-hidden="true" focusable="false">
@@ -759,8 +760,9 @@
         </p>
         <p>
           Nimble Newt is open source under the MIT license and not affiliated with Notepad++. This site
-          uses no cookies or analytics; its only outside request asks the GitHub API for the latest
-          release.
+          uses no cookies. Visits are counted with our own Keen Kestrel, which keeps no IP addresses or
+          lasting identifiers and respects Global Privacy Control; the only other outside request asks
+          the GitHub API for the latest release.
         </p>
       </div>
     </footer>
