@@ -16,6 +16,9 @@ permissions:
 jobs:
   sign:
     name: Sign and notarize (macOS)
+    # Dependabot's branches never get the repository secrets, so the check can't run
+    # there; it runs again on main once the update is merged.
+    if: github.actor != 'dependabot[bot]'
     runs-on: macos-latest
     env:
       IN_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
