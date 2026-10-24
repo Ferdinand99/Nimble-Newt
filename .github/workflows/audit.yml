@@ -1,0 +1,27 @@
+# Known vulnerabilities in the Rust dependencies (RustSec advisory database):
+# on every pull request and push to main that changes the lock file, and once a
+# week so a new advisory against an unchanged lock file is noticed too.
+name: Audit
+
+on:
+  pull_request:
+    paths: ["**/Cargo.lock", "**/Cargo.toml", ".github/workflows/audit.yml"]
+  push:
+    branches: [main]
+    paths: ["**/Cargo.lock", "**/Cargo.toml", ".github/workflows/audit.yml"]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  advisories:
+    name: RustSec advisories
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories
