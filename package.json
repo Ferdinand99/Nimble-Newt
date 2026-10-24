@@ -51,7 +51,7 @@
     "codemirror": "^6.0.2"
   },
   "devDependencies": {
-    "@eslint/js": "^9",
+    "@eslint/js": "^10",
     "@tauri-apps/cli": "^2",
     "@types/node": "^26.6.5",
     "eslint": "^10",
