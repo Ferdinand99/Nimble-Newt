@@ -1,0 +1,18 @@
+# cargo-deny configuration, used by the Audit workflow (advisories only).
+[advisories]
+ignore = [
+    # zip < 9: ZipArchive::extract / ZipStreamReader::extract mishandle symlinks
+    # and SUID bits. Nimble Newt's own unpacking (crates/core/src/extensions.rs,
+    # extract_zip) reads entries with by_index_raw and refuses symlinks and special
+    # modes; tauri-plugin-updater only unpacks signature-checked update bundles.
+    # Move to zip 9 when tauri-plugin-updater does.
+    { id = "RUSTSEC-2026-0367", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
+    { id = "RUSTSEC-2026-0368", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
+    { id = "RUSTSEC-2026-0369", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
+    # Unmaintained crates that come in through Tauri's Linux stack (gtk3/glib
+    # macros, zbus). Build-time macros or D-Bus plumbing; no fix until Tauri moves.
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error via gtk3/glib macros (Tauri, Linux), build time only" },
+    { id = "RUSTSEC-2026-0370", reason = "zbus stack via Tauri on Linux; unmaintained, no known vulnerability" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus stack via Tauri on Linux; unmaintained, no known vulnerability" },
+    { id = "RUSTSEC-2026-0372", reason = "zbus stack via Tauri on Linux; unmaintained, no known vulnerability" },
+]
