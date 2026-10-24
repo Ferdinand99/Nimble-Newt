@@ -24,6 +24,10 @@ updates:
       prefix: "chore(deps)"
   - package-ecosystem: github-actions
     directory: /
+    ignore:
+      # Its tag picks the Rust version (rust-toolchain@1.99); a "newer tag"
+      # is a different toolchain, not an update of the action.
+      - dependency-name: dtolnay/rust-toolchain
     schedule:
       interval: weekly
     groups:
