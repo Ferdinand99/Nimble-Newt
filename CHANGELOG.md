@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/Ferdinand99/Nimble-Newt/compare/v0.2.0...v0.2.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **deps:** update tokio (RUSTSEC-2026-0384), Dependabot and a weekly audit ([645b07b](https://github.com/Ferdinand99/Nimble-Newt/commit/645b07b95b5dee1d24e335bfec9548ec44339bec))
+
 ## [0.2.0](https://github.com/Ferdinand99/Nimble-Newt/compare/v0.1.0...v0.2.0) (2026-10-21)
 
 
