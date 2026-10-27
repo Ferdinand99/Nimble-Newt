@@ -540,7 +540,7 @@ fn extract_zip(zip_path: &Path, dst: &Path) -> Result<()> {
     let mut items: Vec<(usize, String, bool)> = Vec::new();
     for i in 0..ar.len() {
         let f = ar.by_index_raw(i).map_err(zip_err)?;
-        let name = f.name().to_string();
+        let name = f.name().map_err(zip_err)?.into_owned();
         if name.starts_with("__MACOSX/") {
             continue;
         }

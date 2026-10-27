@@ -55,7 +55,7 @@ export function collectWords(text: string, options: CollectOptions = {}): WordIn
   let i = 0;
   while (i < n) {
     // skip non-word characters
-    let cp = 0;
+    let cp: number;
     let c = text.charCodeAt(i);
     let step = 1;
     if (c < 128) {
