@@ -2,7 +2,7 @@
 name = "nimble-newt"
 version = "0.2.1"
 edition = "2021"
-license = "MIT"
+license = "AGPL-3.0-only"
 description = "A fast, modern text editor for Windows and macOS"
 repository = "https://github.com/Ferdinand99/Nimble-Newt"
 
