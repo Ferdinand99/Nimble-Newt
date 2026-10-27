@@ -268,7 +268,9 @@ struct FileMeta {
 
 #[tauri::command]
 async fn file_meta(path: String) -> CmdResult<FileMeta> {
-    let size = std::fs::metadata(&path).map_err(err)?.len();
+    let size = fileio::regular_file_metadata(Path::new(&path))
+        .map_err(err)?
+        .len();
     Ok(FileMeta {
         size,
         large: size > fileio::MAX_EDITABLE_BYTES,
@@ -600,10 +602,10 @@ async fn search_folder(
 async fn replace_in_folder(
     options: SearchOptions,
     replacement: String,
-    paths: Vec<String>,
+    targets: Vec<search::ReplaceTarget>,
 ) -> CmdResult<ReplaceReport> {
     tauri::async_runtime::spawn_blocking(move || {
-        search::replace_in_files(&options, &replacement, &paths)
+        search::replace_in_files(&options, &replacement, &targets)
     })
     .await
     .map_err(err)?

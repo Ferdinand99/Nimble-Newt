@@ -576,7 +576,10 @@ fn extract_zip(zip_path: &Path, dst: &Path) -> Result<()> {
     // Pass 2: extract, counting the bytes really produced.
     let mut budget = Budget::new();
     for (i, name, is_dir) in &items {
-        let rel = &name[prefix.len()..];
+        // Only an entry sharing the folder's name (`top` next to `top/manifest.json`) lacks the prefix.
+        let Some(rel) = name.strip_prefix(prefix.as_str()) else {
+            return bad(format!("\"{name}\" clashes with the top-level folder"));
+        };
         let rel = rel.strip_suffix('/').unwrap_or(rel);
         if rel.is_empty() {
             continue;
@@ -1649,6 +1652,18 @@ mod tests {
             .to_string();
         assert!(e.contains("symbolic"), "{e}");
         assert!(store_is_empty(&s));
+    }
+
+    #[test]
+    fn zip_entry_named_like_the_top_level_folder_is_an_error_not_a_panic() {
+        assert_rejected_zip(
+            &[
+                ("top", b"x".to_vec()),
+                ("top/manifest.json", m()),
+                ("top/main.js", b"x".to_vec()),
+            ],
+            "top-level folder",
+        );
     }
 
     #[test]

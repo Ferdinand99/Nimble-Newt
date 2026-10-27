@@ -675,6 +675,8 @@ impl LargeFile {
         opts: IndexOptions,
         encoding: Option<TextEncoding>,
     ) -> Result<(LargeFile, OpenInfo)> {
+        // Checked before opening: opening a FIFO would block until a writer shows up.
+        crate::fileio::regular_file_metadata(path)?;
         let file = File::open(path)?;
         let meta = file.metadata()?;
         if !meta.is_file() {

@@ -106,8 +106,8 @@ function renderResults(): void {
   updateReplaceButton();
 }
 
-function selectedFiles(): string[] {
-  return (report?.files ?? []).map((f) => f.path).filter((p) => !unchecked.has(p));
+function selectedFiles(): { path: string; mtimeMs: number }[] {
+  return (report?.files ?? []).filter((f) => !unchecked.has(f.path)).map((f) => ({ path: f.path, mtimeMs: f.mtimeMs }));
 }
 
 function updateReplaceButton(): void {
@@ -119,12 +119,14 @@ function updateReplaceButton(): void {
 async function doReplace(): Promise<void> {
   const files = selectedFiles();
   if (!report || !files.length) return;
-  const matches = report.files.filter((f) => files.includes(f.path)).reduce((n, f) => n + f.matches.length, 0);
+  const picked = new Set(files.map((f) => f.path));
+  const matches = report.files.filter((f) => picked.has(f.path)).reduce((n, f) => n + f.matches.length, 0);
   const ok = await confirmSheet(t("fif.confirmTitle"), t("fif.confirmMessage", { matches, files: files.length }), t("fif.confirmOk"), true);
   if (!ok) return;
   try {
     const r = await api.replaceInFolder(options(), replaceIn.value, files);
-    toast(t("fif.replaced", { n: r.replacements, files: r.filesChanged }), r.errors.length ? "warning" : "success");
+    toast(t("fif.replaced", { n: r.replacements, files: r.filesChanged }), r.errors.length || r.skipped.length ? "warning" : "success");
+    for (const e of r.skipped) toast(e, "warning");
     for (const e of r.errors) toast(e, "error");
     await workspace.checkExternal();
     run();

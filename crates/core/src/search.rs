@@ -66,6 +66,9 @@ pub struct Match {
 #[serde(rename_all = "camelCase")]
 pub struct FileMatches {
     pub path: String,
+    /// Modification time of the file when it was searched. A replacement hands it back and is
+    /// refused when the file has changed since.
+    pub mtime_ms: i64,
     pub matches: Vec<Match>,
 }
 
@@ -84,8 +87,25 @@ pub struct SearchReport {
 pub struct ReplaceReport {
     pub files_changed: usize,
     pub replacements: usize,
+    /// Files left untouched on purpose (they cannot be decoded without losing data).
+    pub skipped: Vec<String>,
     pub errors: Vec<String>,
 }
+
+/// A file picked from the search preview, with the modification time the preview saw.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceTarget {
+    pub path: String,
+    pub mtime_ms: i64,
+}
+
+/// At most this many matches are listed per file; a file hitting it marks the search as truncated.
+pub const MAX_MATCHES_PER_FILE: usize = 1000;
+/// Longest stretch of a line shown around a match (in characters).
+const PREVIEW_CHARS: usize = 200;
+/// Characters of context kept in front of the match.
+const PREVIEW_BEFORE: usize = 40;
 
 pub fn build_regex(
     query: &str,
@@ -186,6 +206,8 @@ fn utf16_len(s: &str) -> usize {
 }
 
 /// Matches of `re` in `text` with line/column info. `replacement` fills `Match::replaced`.
+/// Line boundaries, columns and replaced lines are worked out once per line and never rescanned
+/// per match, so a minified file with one huge line and many matches stays linear.
 pub fn find_in_text(
     re: &Regex,
     text: &str,
@@ -193,10 +215,12 @@ pub fn find_in_text(
     limit: usize,
 ) -> Vec<Match> {
     let mut out = Vec::new();
-    // Byte offset of the start of each line, built lazily as we advance.
+    let bytes = text.as_bytes();
     let mut line_no = 1usize;
     let mut line_start = 0usize;
     let mut cursor = 0usize;
+    // State of the line the previous match was on; rebuilt when a match is on another line.
+    let mut cur = LineState::default();
     for m in re.find_iter(text) {
         if out.len() >= limit {
             break;
@@ -205,30 +229,37 @@ pub fn find_in_text(
             continue;
         }
         // Advance the line counter up to the match start.
-        for (i, b) in text.as_bytes()[cursor..m.start()].iter().enumerate() {
-            if *b == b'\n' {
-                line_no += 1;
-                line_start = cursor + i + 1;
-            }
+        for i in memchr::memchr_iter(b'\n', &bytes[cursor..m.start()]) {
+            line_no += 1;
+            line_start = cursor + i + 1;
         }
         cursor = m.start();
-        let line_end = text[m.start()..]
-            .find('\n')
-            .map(|i| m.start() + i)
-            .unwrap_or(text.len());
-        let line = text[line_start..line_end].trim_end_matches('\r');
-        let col_bytes = m.start() - line_start;
-        let match_end_in_line = (m.end() - line_start).min(line.len());
-        let column = utf16_len(&line[..col_bytes.min(line.len())]);
-        let length = utf16_len(&line[col_bytes.min(line.len())..match_end_in_line]).max(1);
-        let (preview, preview_offset) = window(line, column);
-        let replaced = replacement.map(|(rep, is_regex)| {
-            let new_line = if is_regex {
-                re.replace_all(line, rep).into_owned()
-            } else {
-                re.replace_all(line, NoExpand(rep)).into_owned()
+        if cur.start != Some(line_start) {
+            let line_end =
+                memchr::memchr(b'\n', &bytes[line_start..]).map_or(text.len(), |i| line_start + i);
+            cur = LineState {
+                start: Some(line_start),
+                end: line_end,
+                ..LineState::default()
             };
-            window(&new_line, column).0
+        }
+        let line = text[line_start..cur.end].trim_end_matches('\r');
+        let col_bytes = (m.start() - line_start).min(line.len());
+        let match_end_in_line = (m.end() - line_start).min(line.len());
+        let column = cur.cursor.utf16_at_byte(line, col_bytes);
+        let length = utf16_len(&line[col_bytes..match_end_in_line]).max(1);
+        let (preview, preview_offset) = window(line, col_bytes);
+        let replaced = replacement.map(|(rep, is_regex)| {
+            let new_line = cur.replaced.get_or_insert_with(|| {
+                if is_regex {
+                    re.replace_all(line, rep).into_owned()
+                } else {
+                    re.replace_all(line, NoExpand(rep)).into_owned()
+                }
+            });
+            // The replaced line is shown around the same column as the original one.
+            let at = cur.replaced_cursor.byte_at_utf16(new_line, column);
+            window(new_line, at).0
         });
         out.push(Match {
             line: line_no,
@@ -242,29 +273,70 @@ pub fn find_in_text(
     out
 }
 
-/// Trims a long line to ~160 chars around the match so huge minified files stay readable.
-fn window(line: &str, column_utf16: usize) -> (String, usize) {
-    const BEFORE: usize = 40;
-    const TOTAL: usize = 160;
-    let chars: Vec<char> = line.chars().collect();
-    // Convert the UTF-16 column to a char index.
-    let mut units = 0;
-    let mut col = chars.len();
-    for (i, c) in chars.iter().enumerate() {
-        if units >= column_utf16 {
-            col = i;
-            break;
+/// Progress through one line while its matches are listed in order.
+#[derive(Default)]
+struct LineState {
+    start: Option<usize>,
+    /// Byte offset of the line break (or the end of the text).
+    end: usize,
+    /// Position reached so far in the line.
+    cursor: Cursor,
+    /// The whole line after replacement, built on the first match.
+    replaced: Option<String>,
+    replaced_cursor: Cursor,
+}
+
+/// Monotonic position in a line, so moving on to the next match never restarts at the line start.
+#[derive(Default)]
+struct Cursor {
+    byte: usize,
+    utf16: usize,
+}
+
+impl Cursor {
+    /// UTF-16 column of byte offset `byte` of `line`.
+    fn utf16_at_byte(&mut self, line: &str, byte: usize) -> usize {
+        if byte < self.byte {
+            *self = Cursor::default();
         }
-        units += c.len_utf16();
+        self.utf16 += utf16_len(&line[self.byte..byte]);
+        self.byte = byte;
+        self.utf16
     }
-    let start = col.saturating_sub(BEFORE);
-    let end = (start + TOTAL).min(chars.len());
-    let s: String = chars[start..end].iter().collect();
-    let offset: usize = chars[start..col.min(end)]
-        .iter()
-        .map(|c| c.len_utf16())
-        .sum();
-    (s, offset)
+
+    /// Byte offset of UTF-16 column `col` of `line` (its end when the column is past it).
+    fn byte_at_utf16(&mut self, line: &str, col: usize) -> usize {
+        if col < self.utf16 {
+            *self = Cursor::default();
+        }
+        for c in line[self.byte..].chars() {
+            if self.utf16 >= col {
+                break;
+            }
+            self.utf16 += c.len_utf16();
+            self.byte += c.len_utf8();
+        }
+        self.byte
+    }
+}
+
+/// Trims a long line to ~200 chars around byte offset `at`, so huge minified files stay readable
+/// and cost no more than the excerpt. Returns the text and the offset of `at` in it (UTF-16 units).
+fn window(line: &str, at: usize) -> (String, usize) {
+    let at = at.min(line.len());
+    let start = line[..at]
+        .char_indices()
+        .rev()
+        .nth(PREVIEW_BEFORE.saturating_sub(1))
+        .map_or(0, |(i, _)| i);
+    let end = line[start..]
+        .char_indices()
+        .nth(PREVIEW_CHARS)
+        .map_or(line.len(), |(i, _)| start + i);
+    (
+        line[start..end].to_owned(),
+        utf16_len(&line[start..at.min(end)]),
+    )
 }
 
 fn read_text(path: &Path) -> Option<(encoding::Decoded, bool)> {
@@ -285,6 +357,8 @@ pub fn search(o: &SearchOptions, replacement: Option<&str>) -> Result<SearchRepo
             report.truncated = true;
             break;
         }
+        // Taken before reading: a change after this makes a later replace refuse the file.
+        let mtime_ms = fileio::mtime_ms(&path).unwrap_or(0);
         let Some((decoded, binary)) = read_text(&path) else {
             continue;
         };
@@ -293,14 +367,18 @@ pub fn search(o: &SearchOptions, replacement: Option<&str>) -> Result<SearchRepo
             report.files_skipped_binary += 1;
             continue;
         }
-        let room = o.max_results - report.total_matches;
+        let room = (o.max_results - report.total_matches).min(MAX_MATCHES_PER_FILE);
         let matches = find_in_text(&re, &decoded.text, replacement.map(|r| (r, o.regex)), room);
         if matches.is_empty() {
             continue;
         }
+        if matches.len() == MAX_MATCHES_PER_FILE {
+            report.truncated = true;
+        }
         report.total_matches += matches.len();
         report.files.push(FileMatches {
             path: path.to_string_lossy().into_owned(),
+            mtime_ms,
             matches,
         });
     }
@@ -308,19 +386,27 @@ pub fn search(o: &SearchOptions, replacement: Option<&str>) -> Result<SearchRepo
 }
 
 /// Replaces in the given files only (the user's confirmed selection from the preview),
-/// preserving each file's encoding and line endings.
+/// preserving each file's encoding and line endings. A file that changed since the preview,
+/// or that cannot be decoded without loss, is left alone and reported.
 pub fn replace_in_files(
     o: &SearchOptions,
     replacement: &str,
-    paths: &[String],
+    targets: &[ReplaceTarget],
 ) -> Result<ReplaceReport> {
     let re = build_regex(&o.query, o.regex, o.case_sensitive, o.whole_word)?;
     let allowed: std::collections::HashSet<PathBuf> = collect_files(o)?.into_iter().collect();
     let mut report = ReplaceReport::default();
-    for p in paths {
+    for target in targets {
+        let p = &target.path;
         let path = PathBuf::from(p);
         if !allowed.contains(&path) {
             report.errors.push(format!("{p}: not part of the search"));
+            continue;
+        }
+        if fileio::mtime_ms(&path) != Some(target.mtime_ms) {
+            report
+                .errors
+                .push(format!("{p}: changed since the preview, search again"));
             continue;
         }
         let Some((decoded, binary)) = read_text(&path) else {
@@ -328,6 +414,12 @@ pub fn replace_in_files(
             continue;
         };
         if binary {
+            continue;
+        }
+        if decoded.lossy {
+            report
+                .skipped
+                .push(format!("{p}: not valid in its detected encoding"));
             continue;
         }
         let count = re
@@ -344,7 +436,14 @@ pub fn replace_in_files(
                 .into_owned()
         };
         let eol = decoded.eol.unwrap_or(Eol::Lf);
-        match fileio::write(&path, &new_text, decoded.encoding, eol) {
+        match fileio::write_checked(
+            &path,
+            &new_text,
+            decoded.encoding,
+            eol,
+            Some(target.mtime_ms),
+            false,
+        ) {
             Ok(_) => {
                 report.files_changed += 1;
                 report.replacements += count;
@@ -365,6 +464,14 @@ mod tests {
             root: root.to_string_lossy().into_owned(),
             query: q.into(),
             ..Default::default()
+        }
+    }
+
+    /// A replace target with the file's current modification time, as a fresh preview would give.
+    fn target(p: &Path) -> ReplaceTarget {
+        ReplaceTarget {
+            path: p.to_string_lossy().into_owned(),
+            mtime_ms: fileio::mtime_ms(p).unwrap(),
         }
     }
 
@@ -478,7 +585,7 @@ mod tests {
         fs::write(&f, "foo\r\nbar\r\n").unwrap();
         let mut o = opts(d.path(), "foo$");
         o.regex = true;
-        let rep = replace_in_files(&o, "baz", &[f.to_string_lossy().into_owned()]).unwrap();
+        let rep = replace_in_files(&o, "baz", &[target(&f)]).unwrap();
         assert_eq!(rep.replacements, 1);
         assert_eq!(fs::read(&f).unwrap(), b"baz\r\nbar\r\n");
     }
@@ -515,8 +622,7 @@ mod tests {
         fs::write(&a, bytes).unwrap();
         fs::write(&b, "hello").unwrap();
         let o = opts(d.path(), "hello");
-        let a_s = a.to_string_lossy().into_owned();
-        let rep = replace_in_files(&o, "bye", &[a_s]).unwrap();
+        let rep = replace_in_files(&o, "bye", &[target(&a)]).unwrap();
         assert_eq!((rep.files_changed, rep.replacements), (1, 2));
         let o2 = fileio::read(&a, Eol::Lf).unwrap();
         assert_eq!(o2.text, "bye\r\nbye");
@@ -530,12 +636,7 @@ mod tests {
         let outside = tempfile::tempdir().unwrap();
         let f = outside.path().join("x.txt");
         fs::write(&f, "foo").unwrap();
-        let rep = replace_in_files(
-            &opts(d.path(), "foo"),
-            "bar",
-            &[f.to_string_lossy().into_owned()],
-        )
-        .unwrap();
+        let rep = replace_in_files(&opts(d.path(), "foo"), "bar", &[target(&f)]).unwrap();
         assert_eq!(rep.files_changed, 0);
         assert_eq!(rep.errors.len(), 1);
         assert_eq!(fs::read_to_string(&f).unwrap(), "foo");
@@ -546,10 +647,102 @@ mod tests {
         let line = format!("{}needle{}", "a".repeat(500), "b".repeat(500));
         let re = build_regex("needle", false, true, false).unwrap();
         let m = find_in_text(&re, &line, None, 1);
-        assert!(m[0].preview.chars().count() <= 160);
+        assert!(m[0].preview.chars().count() <= PREVIEW_CHARS);
         assert_eq!(
             &m[0].preview[m[0].preview_offset..m[0].preview_offset + 6],
             "needle"
         );
+    }
+
+    #[test]
+    fn search_reports_the_mtime_the_replace_must_match() {
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("a.txt");
+        fs::write(&f, "foo").unwrap();
+        let r = search(&opts(d.path(), "foo"), None).unwrap();
+        assert_eq!(r.files[0].mtime_ms, fileio::mtime_ms(&f).unwrap());
+    }
+
+    #[test]
+    fn replace_refuses_a_file_changed_since_the_preview() {
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("a.txt");
+        fs::write(&f, "foo").unwrap();
+        let mut stale = target(&f);
+        stale.mtime_ms -= 5000;
+        let rep = replace_in_files(&opts(d.path(), "foo"), "bar", &[stale]).unwrap();
+        assert_eq!(rep.files_changed, 0);
+        assert_eq!(rep.errors.len(), 1);
+        assert!(
+            rep.errors[0].contains("changed since the preview"),
+            "{rep:?}"
+        );
+        assert_eq!(fs::read_to_string(&f).unwrap(), "foo");
+    }
+
+    #[test]
+    fn replace_skips_files_that_do_not_decode_cleanly() {
+        let d = tempfile::tempdir().unwrap();
+        let bad = d.path().join("bad.txt");
+        let good = d.path().join("good.txt");
+        // A UTF-8 byte order mark promises valid UTF-8, then a stray byte breaks the promise.
+        let bytes = [[0xef, 0xbb, 0xbf].as_slice(), b"foo ", &[0xff], b" foo"].concat();
+        assert!(encoding::decode(&bytes).lossy);
+        fs::write(&bad, &bytes).unwrap();
+        fs::write(&good, "foo").unwrap();
+        let rep = replace_in_files(
+            &opts(d.path(), "foo"),
+            "bar",
+            &[target(&bad), target(&good)],
+        )
+        .unwrap();
+        assert_eq!(rep.skipped.len(), 1, "{rep:?}");
+        assert_eq!(rep.files_changed, 1);
+        assert_eq!(fs::read(&bad).unwrap(), bytes);
+        assert_eq!(fs::read_to_string(&good).unwrap(), "bar");
+    }
+
+    #[test]
+    fn a_20_mb_single_line_is_searched_quickly() {
+        let line = "needle ".repeat(3_000_000); // about 21 MB, one line, 3 million matches
+        let re = build_regex("needle", false, true, false).unwrap();
+        let start = std::time::Instant::now();
+        let m = find_in_text(&re, &line, Some(("pin", false)), MAX_MATCHES_PER_FILE);
+        assert!(start.elapsed().as_secs() < 10, "{:?}", start.elapsed());
+        assert_eq!(m.len(), MAX_MATCHES_PER_FILE);
+        for x in &m {
+            assert!(x.preview.chars().count() <= PREVIEW_CHARS);
+            assert!(x.replaced.as_ref().unwrap().chars().count() <= PREVIEW_CHARS);
+        }
+        assert_eq!(m[999].column, 999 * 7);
+        // A match near the far end is as cheap as one at the start.
+        let re = build_regex("needle $", true, true, false).unwrap();
+        let start = std::time::Instant::now();
+        let end = find_in_text(&re, &line, Some(("pin", false)), 1);
+        assert!(start.elapsed().as_secs() < 10, "{:?}", start.elapsed());
+        assert_eq!(end[0].column, 7 * 2_999_999);
+    }
+
+    #[test]
+    fn matches_per_file_are_capped() {
+        let d = tempfile::tempdir().unwrap();
+        let text = "x\n".repeat(MAX_MATCHES_PER_FILE + 50);
+        fs::write(d.path().join("a.txt"), text).unwrap();
+        let r = search(&opts(d.path(), "x"), None).unwrap();
+        assert_eq!(r.total_matches, MAX_MATCHES_PER_FILE);
+        assert!(r.truncated);
+    }
+
+    #[test]
+    fn window_respects_multibyte_boundaries() {
+        let line = format!("{}needle{}", "é😀".repeat(300), "ü".repeat(300));
+        let re = build_regex("needle", false, true, false).unwrap();
+        let m = find_in_text(&re, &line, Some(("pin", false)), 1);
+        let units: Vec<u16> = m[0].preview.encode_utf16().collect();
+        assert_eq!(
+            String::from_utf16_lossy(&units[m[0].preview_offset..m[0].preview_offset + 6]),
+            "needle"
+        );
+        assert!(m[0].replaced.as_ref().unwrap().contains("pin"));
     }
 }

@@ -76,6 +76,7 @@ export interface Match {
 }
 export interface FileMatches {
   path: string;
+  mtimeMs: number;
   matches: Match[];
 }
 export interface SearchReport {
@@ -88,6 +89,7 @@ export interface SearchReport {
 export interface ReplaceReport {
   filesChanged: number;
   replacements: number;
+  skipped: string[];
   errors: string[];
 }
 
@@ -240,7 +242,7 @@ export const api = {
   docRead: (name: string) => invoke<string | null>("doc_read", { name }),
   docWrite: (name: string, json: string) => invoke<void>("doc_write", { name, json }),
   searchFolder: (options: SearchOptions, replacement: string | null) => invoke<SearchReport>("search_folder", { options, replacement }),
-  replaceInFolder: (options: SearchOptions, replacement: string, paths: string[]) => invoke<ReplaceReport>("replace_in_folder", { options, replacement, paths }),
+  replaceInFolder: (options: SearchOptions, replacement: string, targets: { path: string; mtimeMs: number }[]) => invoke<ReplaceReport>("replace_in_folder", { options, replacement, targets }),
   takePendingPaths: () => invoke<string[]>("take_pending_paths"),
   setExtensionMenu: (locale: string, items: { id: string; label: string }[]) => invoke<void>("set_extension_menu", { locale, items }),
   sandboxStage: (html: string) => invoke<string>("sandbox_stage", { html }),
