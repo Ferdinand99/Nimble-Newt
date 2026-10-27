@@ -2,10 +2,9 @@
 [advisories]
 ignore = [
     # zip < 9: ZipArchive::extract / ZipStreamReader::extract mishandle symlinks
-    # and SUID bits. Nimble Newt's own unpacking (crates/core/src/extensions.rs,
-    # extract_zip) reads entries with by_index_raw and refuses symlinks and special
-    # modes; tauri-plugin-updater only unpacks signature-checked update bundles.
-    # Move to zip 9 when tauri-plugin-updater does.
+    # and SUID bits. Nimble Newt itself uses zip 9; the remaining zip 4 comes from
+    # tauri-plugin-updater, which only unpacks signature-checked update bundles.
+    # Drop these ignores when tauri-plugin-updater moves to zip 9.
     { id = "RUSTSEC-2026-0367", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
     { id = "RUSTSEC-2026-0368", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
     { id = "RUSTSEC-2026-0369", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },

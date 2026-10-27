@@ -107,7 +107,7 @@ function makeComparator(o: SortOptions): (a: string, b: string) => number {
     for (let i = 0; i < n; i++) {
       const p = ca[i];
       const q = cb[i];
-      let r = 0;
+      let r: number;
       if (p.k === "t" && q.k === "t") r = text(p.s, q.s);
       else if (p.k !== "t" && q.k !== "t") r = p.k === "n" && q.k === "n" ? p.v - q.v : cmpDigits(p.s.replace(/^[+-]/, ""), q.s.replace(/^[+-]/, ""));
       else r = p.k === "t" ? 1 : -1; // numbers before text

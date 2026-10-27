@@ -224,9 +224,9 @@ fn detect_impl(bytes: &[u8], sample_only: bool) -> TextEncoding {
         }
     }
     let sample = &bytes[..bytes.len().min(DETECT_LIMIT)];
-    let mut det = chardetng::EncodingDetector::new();
+    let mut det = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
     det.feed(sample, !sample_only && sample.len() == bytes.len());
-    let (guess, confident) = det.guess_assess(None, false);
+    let guess = det.guess(None, chardetng::Utf8Detection::Deny);
     if guess == encoding_rs::UTF_16LE {
         return TextEncoding::Utf16Le;
     }
@@ -234,14 +234,7 @@ fn detect_impl(bytes: &[u8], sample_only: bool) -> TextEncoding {
         return TextEncoding::Utf16Be;
     }
     if SUPPORTED.contains(&guess) {
-        // Without real evidence, single-byte guesses are noise: Windows-1252 is the safest default.
-        let multibyte = matches!(
-            guess.name(),
-            "Shift_JIS" | "EUC-JP" | "EUC-KR" | "GBK" | "gb18030" | "Big5"
-        );
-        if confident || multibyte {
-            return TextEncoding::Legacy(guess);
-        }
+        return TextEncoding::Legacy(guess);
     }
     TextEncoding::Windows1252
 }
