@@ -2,7 +2,7 @@
 name = "nimble-core"
 version = "0.2.1"
 edition = "2021"
-license = "MIT"
+license = "AGPL-3.0-only"
 description = "Encoding, line endings, session storage and search for Nimble Newt"
 
 [dependencies]

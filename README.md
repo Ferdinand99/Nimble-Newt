@@ -8,7 +8,7 @@
 Notepad++ simplicity, a clean Apple-inspired design, and a small native app built with Rust and Tauri.
 
 [![CI](https://github.com/Ferdinand99/Nimble-Newt/actions/workflows/ci.yml/badge.svg)](https://github.com/Ferdinand99/Nimble-Newt/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Website](https://img.shields.io/badge/website-hedgerow.tools%2FNimble--Newt-black.svg)](https://hedgerow.tools/Nimble-Newt/)
 
 <picture>
@@ -177,4 +177,4 @@ Not done yet:
 
 ## License
 
-[MIT](LICENSE). The Inter typeface is included under the SIL Open Font License (`public/fonts/Inter-LICENSE.txt`); the design system and icons derive from [Vigilant Vole](https://github.com/Ferdinand99/Vigilant-Vole) (MIT).
+[GNU AGPL-3.0-only](LICENSE). The Inter typeface is included under the SIL Open Font License (`public/fonts/Inter-LICENSE.txt`); the design system and icons originate in [Vigilant Vole](https://github.com/Ferdinand99/Vigilant-Vole); see the applicable LICENSE files and release history for license terms.
