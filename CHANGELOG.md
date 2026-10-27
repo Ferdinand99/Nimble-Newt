@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/Ferdinand99/Nimble-Newt/compare/v0.2.1...v0.2.2) (2026-10-27)
+
+
+### Bug Fixes
+
+* security hardening from the October review ([#27](https://github.com/Ferdinand99/Nimble-Newt/issues/27)) ([ca6f2e9](https://github.com/Ferdinand99/Nimble-Newt/commit/ca6f2e9086f1c69eb0bf4e89791d2f6ac7a580cd))
+
 ## [0.2.1](https://github.com/Ferdinand99/Nimble-Newt/compare/v0.2.0...v0.2.1) (2026-10-24)
 
 
