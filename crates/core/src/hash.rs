@@ -85,6 +85,15 @@ pub fn hash_reader(algos: &[Algorithm], mut r: impl Read) -> Result<Vec<(Algorit
 }
 
 pub fn hash_file(path: &Path, algos: &[Algorithm]) -> Result<Vec<(Algorithm, String)>> {
+    // A FIFO or device would block or never end, so refuse it before opening.
+    let meta =
+        std::fs::metadata(path).map_err(|e| Error::Msg(format!("{}: {e}", path.display())))?;
+    if !meta.is_file() {
+        return Err(Error::Msg(format!(
+            "{} is not a regular file",
+            path.display()
+        )));
+    }
     let f =
         std::fs::File::open(path).map_err(|e| Error::Msg(format!("{}: {e}", path.display())))?;
     hash_reader(algos, f)
@@ -157,5 +166,12 @@ mod tests {
             serde_json::from_str::<Algorithm>("\"md5\"").unwrap(),
             Algorithm::Md5
         );
+    }
+
+    #[test]
+    fn hashing_refuses_non_regular_files() {
+        let dir = std::env::temp_dir();
+        let err = hash_file(&dir, &[Algorithm::Sha256]).unwrap_err();
+        assert!(err.to_string().contains("not a regular file"), "{err}");
     }
 }

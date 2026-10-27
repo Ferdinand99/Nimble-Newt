@@ -4,8 +4,10 @@ use crate::encoding::{self, TextEncoding};
 use crate::eol::{self, Eol};
 use crate::{Error, Result};
 use serde::Serialize;
+use std::collections::hash_map::RandomState;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::UNIX_EPOCH;
 
 /// Files above this size are refused for now; chunked viewing of huge files is on the roadmap.
@@ -64,9 +66,22 @@ fn check_editable_size(path: &Path, len: u64) -> Result<()> {
     Ok(())
 }
 
+/// Metadata of `path` (symbolic links followed), refusing anything but a regular file.
+/// A FIFO or device would block or never end when read, so this runs before the file is opened.
+pub fn regular_file_metadata(path: &Path) -> Result<std::fs::Metadata> {
+    let meta = std::fs::metadata(path)?;
+    if !meta.is_file() {
+        return Err(Error::Msg(format!(
+            "{} is not a regular file",
+            path.display()
+        )));
+    }
+    Ok(meta)
+}
+
 /// Reads `path`. `default_eol` is used when the file has no line break at all.
 pub fn read(path: &Path, default_eol: Eol) -> Result<OpenedFile> {
-    let meta = std::fs::metadata(path)?;
+    let meta = regular_file_metadata(path)?;
     check_editable_size(path, meta.len())?;
     let bytes = std::fs::read(path)?;
     if looks_binary(&bytes) {
@@ -90,7 +105,7 @@ pub fn read(path: &Path, default_eol: Eol) -> Result<OpenedFile> {
 /// Re-decodes a file with an explicit encoding (the "Reopen with encoding" action).
 /// Files above [`MAX_EDITABLE_BYTES`] are refused like in [`read`].
 pub fn read_as(path: &Path, enc: TextEncoding, default_eol: Eol) -> Result<OpenedFile> {
-    check_editable_size(path, std::fs::metadata(path)?.len())?;
+    check_editable_size(path, regular_file_metadata(path)?.len())?;
     let bytes = std::fs::read(path)?;
     let (text, lossy) = encoding::decode_as(&bytes, enc);
     Ok(OpenedFile {
@@ -142,8 +157,9 @@ pub fn write_checked(
 }
 
 /// Replaces the content of `path` atomically. Symbolic links are followed, so the link itself
-/// survives and its target is updated. When no temporary file can be created next to the target
-/// (read-only directory) the file is written in place instead.
+/// survives and its target is updated. The temporary file gets a random name and is created
+/// exclusively, so a link planted at a guessable name is never written through. When no temporary
+/// file can be created next to the target (read-only directory) the file is written in place instead.
 pub fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     let target = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let dir = target
@@ -154,26 +170,54 @@ pub fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let tmp = dir.join(format!(".{name}.nimble-tmp"));
-    let mut file = match std::fs::File::create(&tmp) {
-        Ok(f) => f,
-        Err(_) => return write_in_place(&target, bytes),
+    let Some((mut file, tmp)) = create_temp(dir, &name) else {
+        return write_in_place(&target, bytes);
     };
     let staged = file.write_all(bytes).and_then(|()| file.sync_all());
-    drop(file);
     if let Err(e) = staged {
+        drop(file);
         let _ = std::fs::remove_file(&tmp);
         return Err(e.into());
     }
-    // Preserve permissions of an existing target.
+    // Preserve permissions of an existing target, set on the open handle rather than by path.
     if let Ok(meta) = std::fs::metadata(&target) {
-        let _ = std::fs::set_permissions(&tmp, meta.permissions());
+        let _ = file.set_permissions(meta.permissions());
     }
+    drop(file);
     if let Err(e) = std::fs::rename(&tmp, &target) {
         let _ = std::fs::remove_file(&tmp);
         return Err(e.into());
     }
     Ok(())
+}
+
+/// Creates a new, empty temporary file next to the target under an unpredictable name.
+/// `create_new` fails if anything exists at the name, links included, and never follows one.
+fn create_temp(dir: &Path, name: &str) -> Option<(std::fs::File, PathBuf)> {
+    // Keep the whole file name well below the usual 255 byte limit.
+    let stem: String = name.chars().take(64).collect();
+    for _ in 0..16 {
+        let tmp = dir.join(format!(".{stem}.{:016x}.nimble-tmp", random_suffix()));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+        {
+            Ok(f) => return Some((f, tmp)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return None,
+        }
+    }
+    None
+}
+
+/// 64 random bits: `RandomState` is seeded by the operating system for every instance.
+fn random_suffix() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let mut h = RandomState::new().build_hasher();
+    h.write_u64(COUNTER.fetch_add(1, Ordering::Relaxed));
+    h.finish()
 }
 
 fn write_in_place(target: &Path, bytes: &[u8]) -> Result<()> {
@@ -398,5 +442,67 @@ mod tests {
         let err = read_as(&p, TextEncoding::Utf8, Eol::Lf).unwrap_err();
         assert!(err.to_string().contains("too large"), "{err}");
         assert!(read(&p, Eol::Lf).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn planted_links_are_never_written_through() {
+        let dir = tempfile::tempdir().unwrap();
+        let victim = dir.path().join("victim.txt");
+        std::fs::write(&victim, "precious").unwrap();
+        let p = dir.path().join("a.txt");
+        std::fs::write(&p, "old").unwrap();
+        // The old predictable temp name and a few other guessable ones.
+        for name in [".a.txt.nimble-tmp", ".a.txt.tmp", "a.txt.nimble-tmp"] {
+            std::os::unix::fs::symlink(&victim, dir.path().join(name)).unwrap();
+        }
+        write(&p, "new", TextEncoding::Utf8, Eol::Lf).unwrap();
+        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "precious");
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "new");
+        // The planted links are untouched and no temp file is left behind.
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 5);
+    }
+
+    #[test]
+    fn temp_names_are_unpredictable_and_exclusive() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_f1, a) = create_temp(dir.path(), "a.txt").unwrap();
+        let (_f2, b) = create_temp(dir.path(), "a.txt").unwrap();
+        assert_ne!(a, b);
+        assert_ne!(a, dir.path().join(".a.txt.nimble-tmp"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn permissions_of_the_target_are_preserved() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("script.sh");
+        std::fs::write(&p, "old").unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o750)).unwrap();
+        write(&p, "new", TextEncoding::Utf8, Eol::Lf).unwrap();
+        let mode = std::fs::metadata(&p).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o750);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fifos_are_not_opened() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("pipe");
+        assert!(std::process::Command::new("mkfifo")
+            .arg(&p)
+            .status()
+            .unwrap()
+            .success());
+        let err = read(&p, Eol::Lf).unwrap_err();
+        assert!(err.to_string().contains("not a regular file"), "{err}");
+        assert!(read_as(&p, TextEncoding::Utf8, Eol::Lf).is_err());
+    }
+
+    #[test]
+    fn directories_are_not_read_as_files() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(read(dir.path(), Eol::Lf).is_err());
     }
 }
