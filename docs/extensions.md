@@ -18,33 +18,56 @@ Extensions are written by third parties and may be hostile or buggy. The protect
 
 1. **No native code.** The Rust side only parses manifests and reads files from the extension's own folder. Nothing in
    an extension package is ever executed by the OS. (This rules out Notepad++-style DLL plugins on purpose.)
-2. **A sandboxed iframe per extension.** The script runs in `<iframe sandbox="allow-scripts" src=...>` without
-   `allow-same-origin`, so it has an opaque origin: no access to the app's DOM, storage, cookies or Tauri IPC. The
-   document is **served by the app from its own URI scheme (`nnext`)** with the header
-   `Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'` (and the same policy as a meta tag). An
-   iframe with `srcdoc` would inherit the app's own CSP and its inline scripts would be blocked in a release build, and
-   the app CSP deliberately does not allow `'unsafe-inline'` for scripts; it only lists the scheme in `frame-src`.
-   The sandbox policy is enforced from parsing on and cannot be removed by script: `fetch`, XHR, WebSocket, images,
-   fonts, media and `import()` are all blocked, so the code has no way out except `postMessage` to the host. Both
+2. **A sandboxed iframe with a Web Worker inside, per extension.** The extension's script does not run in the iframe's
+   window at all. The iframe is `<iframe sandbox="allow-scripts" src=...>` without `allow-same-origin`, so it has an
+   opaque origin: no access to the app's DOM, storage, cookies or Tauri IPC. It runs only our own bootstrap, which starts
+   a **dedicated Web Worker** from a `blob:` URL (the worker bootstrap that defines `nimble`, followed by the
+   extension's script) and passes messages between the worker and the app unchanged. The document is **served by the
+   app from its own URI scheme (`nnext`)** with the header
+   `Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; worker-src blob:`, and the same policy as a
+   meta tag in the document (the two policies apply together, so both must allow the worker). Nothing else is opened:
+   there is no `connect-src`, `frame-src` or `img-src`, and `worker-src` is only `blob:`. An iframe with an inline
+   document would inherit the app's own CSP and its inline scripts would be blocked in a release build, and the app CSP
+   deliberately does not allow `'unsafe-inline'` for scripts; it only lists the scheme in `frame-src`.
+   The sandbox policy is enforced from parsing on and cannot be removed by script, and a worker inherits it: `fetch`,
+   XHR, WebSocket, EventSource, WebTransport, `importScripts`, `import()`, workers from any other URL, and a worker
+   the extension creates itself are all blocked, so the code has no way out except `postMessage` to the host. Both
    WebView2 (Chromium) and WKWebView (WebKit) enforce `sandbox` and CSP. The scheme only serves documents the app
    itself staged a moment before, under unguessable ids; everything else is a 404.
-   **Known gap: WebRTC.** Content Security Policy does not govern `RTCPeerConnection`, and the webview does not let the
-   app switch WebRTC off. The bootstrap removes the WebRTC constructors from the sandbox window as defence in depth,
-   but a script can get them back from a fresh child frame, so WebRTC is **not** reliably blocked. An extension that
-   was granted `editor.read` could therefore try to send text out through ICE/STUN/TURN traffic. This is why
-   `editor.read` is shown prominently in the consent sheet and why extensions have no marketplace in v1: only install
-   extensions you trust. Closing the gap needs a webview-level setting that Tauri does not expose today.
+   **Why a worker (NN-02).** Content Security Policy does not govern WebRTC, and the webview does not let the app
+   switch it off. In a window, a script can always get `RTCPeerConnection` back from a fresh child frame, so an
+   extension with `editor.read` could have sent text out through ICE/STUN/TURN traffic. A worker has **no WebRTC**
+   (`RTCPeerConnection` only exists in `Window`; `RTCDataChannel` exists but cannot be constructed), **no DOM** and
+   cannot create frames, so there is no child frame to recover the constructors from. This was checked in Chromium and
+   WebKit with a hostile extension and a listener on 127.0.0.1: nothing arrived (see the end-to-end check below).
+   **What an extension can use.** Extension code has no `window` or `document`, because it runs in a worker. The
+   language and the usual worker globals are there: `setTimeout`/`setInterval`, `Promise`, `JSON`, `TextEncoder`,
+   `URL`, `crypto.getRandomValues` and so on. (`fetch` and the like exist as names but are blocked by the policy.)
 3. **A small message API with permissions.** The host answers only messages from that iframe's window, validates every
    argument and checks the call against the permissions in the manifest *and* the user's consent. Unknown methods fail.
 4. **Limits.** Script size (1 MB), manifest size (16 KB), package size (5 MB, 200 files), message size (4 MB), call
-   rate (200 calls/s) and a **timeout** for command handlers (10 s). A misbehaving extension is terminated (its iframe
-   is destroyed) and disabled until the user turns it back on.
+   rate (200 calls/s) and a **timeout** for command handlers (10 s). The timeout is real: the iframe owns the clock and,
+   when a handler runs past it, calls `worker.terminate()`, which stops even `while (true) {}` at once, and tells the
+   app. The app keeps its own, slightly longer clock as a backstop in case the iframe never reports. Both clocks stand
+   still while a dialog drawn by the app for `ui.prompt` or `ui.pick` waits for the user. A misbehaving extension is
+   terminated (its iframe is destroyed) and disabled until the user turns it back on.
 5. **User consent.** Installing shows the requested permissions in plain language; the user can disable or remove an
    extension at any time (Extensions… in the command palette).
 
 What this does **not** protect against: an extension that does something unwanted *with the permissions it was
 given* (for example rewriting the document it was asked to edit). Permissions are therefore narrow and named.
 Browser side channels (timing, CPU use) are out of scope; the timeout and the kill switch limit the damage.
+
+### Checking the sandbox
+
+- `npm run test:sandbox` (Playwright, in `e2e/`) loads the real sandbox document in Chromium and WebKit, served with the
+  real CSP header and in an iframe with an opaque origin, and runs a hostile extension in it: `fetch` (also `keepalive`
+  and `no-cors`), XHR, WebSocket, EventSource, WebTransport, `importScripts`, `import()`, workers (also nested),
+  `sendBeacon` and WebRTC. A listener on 127.0.0.1 (TCP and UDP) must see nothing, and a control run with a looser policy
+  must get through, so the test cannot pass by accident. It also checks that `terminate()` ends an endless loop and that
+  the three built-in extensions still work. It runs in CI as its own job.
+- `examples/nn02-check` is an extension to install in the real app on macOS and Windows, which the automated check
+  cannot cover (the `nnext` scheme in WKWebView and WebView2). It shows green when everything is blocked. See its README.
 
 ## Package format
 
@@ -107,17 +130,23 @@ nimble.clipboard.writeText(text);
 nimble.storage.get(key); nimble.storage.set(key, value); nimble.storage.remove(key);
 ```
 
-Wire format (host <-> iframe, `postMessage`, JSON only): `{ id, method, params }` requests and `{ id, result | error }`
-replies; the host starts a command with `{ id, method: "command.run", params: { command, context } }`.
-The bootstrap script that defines `nimble` is part of the srcdoc and is the only code written by us in there.
+Wire format (app <-> sandbox, `postMessage`, JSON only): `{ id, method, params }` requests and `{ id, result | error }`
+replies; the app starts a command with `{ id, method: "command.run", params: { command, context } }`. The iframe passes
+these between the app and the worker unchanged, and the app validates every message. Besides these there are a few
+messages between the iframe and the app: `{ event: "ready" }`, `{ event: "error", message }`,
+`{ event: "worker-failed", message }` (the worker could not start or its script does not parse),
+`{ event: "timeout", id }` (the iframe terminated the worker) and, from the app, `{ control: "hold" | "release" }` to
+pause and resume the command clock. The two bootstrap scripts (src/ext/bootstrap.ts) are the only code of ours in the
+sandbox: the iframe bootstrap relays and keeps the clock, the worker bootstrap defines the frozen `nimble` object.
 
 ## Lifecycle
 
 1. At start-up (after the first paint) the app lists installed extensions and reads their manifests. Their commands appear
    in the palette and menus; the scripts are **not** loaded.
-2. The first time one of its commands runs, the host creates the iframe, sends the script and waits for it to register
-   its handlers (timeout 5 s), then runs the command.
-3. If the iframe fails the timeout, crashes or is too slow, it is destroyed and the extension is disabled with a message.
+2. The first time one of its commands runs, the host stages the sandbox document (with the script inside), creates the
+   iframe, which starts the worker, and waits for the script to register its handlers (timeout 5 s), then runs the command.
+3. If the worker fails to start or to parse, crashes or is too slow (the worker is terminated), the iframe is destroyed and
+   the extension is disabled with a message.
 4. Disabling or removing an extension destroys its iframe immediately and removes its commands from the palette.
 
 ## Installation and updates

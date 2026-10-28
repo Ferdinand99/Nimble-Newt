@@ -27,10 +27,10 @@ sizes), large-file handling, linear-time regex, and update signature checking ov
 | ID | Severity | Title | Status |
 |---|---|---|---|
 | NN-01 | Medium | Predictable temporary file name in atomic saves; a planted symlink made a save overwrite another file | Fixed in #27 |
-| NN-02 | Medium | Extensions can send data out through WebRTC from the sandbox iframe | Open. Known gap, documented; a sandbox redesign is planned |
+| NN-02 | Medium | Extensions can send data out through WebRTC from the sandbox iframe | Fixed: extensions run in a Web Worker (ships in 0.3.0) |
 | NN-03 | Low | Replace in folder wrote lossily decoded files and had no modification-time check | Fixed in #27 |
 | NN-04 | Low | Folder search was quadratic on long lines | Fixed in #27 |
-| NN-05 | Low | Extension timeouts depend on host timers; storage rate; `ui.*` calls outside commands | Open. Owner decision pending |
+| NN-05 | Low | Extension timeouts depend on host timers; storage rate; `ui.*` calls outside commands | Partly fixed: the timeout now terminates the worker (ships in 0.3.0). Open: the storage rate and `ui.*` calls outside commands |
 | NN-06 | Low | Update version not covered by the signature; actions pinned by tag; signing key exposed to the build action | Partly fixed in #27 (actions pinned to commit SHAs). Open: the rest |
 | NN-07 | Info | `extract_zip` panic, install check, FIFOs, plaintext session buffers, `h()` helper trap, test hooks in release builds, optional signing | Partly fixed in #27 (the panic and non-regular files). The other notes are open |
 
@@ -48,16 +48,31 @@ sizes), large-file handling, linear-time regex, and update signature checking ov
   `top/manifest.json`. Opening, comparing, hashing and the large-file viewer refuse anything that is not a regular
   file (FIFOs, devices, directories).
 
+### What was changed for NN-02 and the timeout part of NN-05
+
+- **NN-02, fixed.** The content security policy does not govern `RTCPeerConnection` and the webview cannot switch
+  WebRTC off, and a script in the sandbox window could always recover the constructors from a fresh child frame, so an
+  extension granted `editor.read` could have sent text out. The extension script now runs in a dedicated **Web
+  Worker** inside the sandbox iframe. A worker has no WebRTC, no DOM and cannot create frames, and it inherits the
+  sandbox policy `default-src 'none'; script-src 'unsafe-inline'; worker-src blob:` (header and meta tag), so nothing
+  else is opened either. The app still validates every message; the wire format is unchanged. See
+  [extensions.md](extensions.md).
+- **NN-05, timeout part, fixed.** The command timeout is now kept by the sandbox iframe, which calls
+  `worker.terminate()` when a handler overruns, so a loop that never ends is stopped for real. The app keeps its own
+  clock as a backstop and both stand still while a dialog drawn by the app waits for the user.
+- **Evidence.** A hostile extension tried `fetch` (also `keepalive` and `no-cors`), XHR, WebSocket, EventSource,
+  WebTransport, `importScripts`, `import()`, nested and other workers, `sendBeacon` and WebRTC against a listener
+  on 127.0.0.1, in Playwright Chromium 148 and WebKit 26.4. The listener saw nothing; a control run with a looser policy
+  reached it, so the test is real. This is now `npm run test:sandbox`, which runs in CI. It does not cover the app's
+  own `nnext` scheme in WKWebView and WebView2, so `examples/nn02-check` is an extension to install in the real app on
+  macOS and Windows, which shows green when everything is blocked.
+- **Breaking for a few extensions.** Extension code has no `window` or `document` any more. The `nimble` v1 API
+  never promised a DOM and is unchanged; `setTimeout`, `Promise` and `JSON` are still there.
+
 ## Accepted and open items
 
-- **NN-02, WebRTC exfiltration, open.** The content security policy does not govern `RTCPeerConnection` and the
-  webview cannot switch WebRTC off, so an extension granted `editor.read` could try to send text out. The bootstrap
-  removes the constructors as defence in depth, but a script can recover them from a fresh child frame. This is
-  described in [extensions.md](extensions.md). A redesign of the sandbox is planned. Until then, install only
-  extensions you trust.
-- **NN-05, extension limits, open.** The timeout of extension command handlers depends on host timers, the rate limit
-  on extension storage writes (`storage.set`) is loose, and `ui.*` calls are allowed outside commands. Awaiting an
-  owner decision.
+- **NN-05, remainder, open.** The rate limit on extension storage writes (`storage.set`) is loose, and `ui.*` calls
+  are allowed outside commands. Awaiting an owner decision. (The timeout part is fixed, see above.)
 - **NN-06, remainder, open.** The update version is not part of the signed data, and the signing key reaches the
   build action as a repository secret. The recommendation is to run the signing job in a GitHub environment named
   `release` with required reviewers and move the key secrets there; it is not applied because adding the environment
@@ -68,18 +83,20 @@ sizes), large-file handling, linear-time regex, and update signature checking ov
 
 ## Not covered
 
-- Dynamic behaviour: the extension sandbox was reviewed by reading the design and code, not attacked with a running
-  build, and no network capture was made.
+- Dynamic behaviour of the sandbox in the review itself: it was reviewed by reading the design and code. The NN-02 fix
+  was tested dynamically afterwards (see above) in Chromium and WebKit, not in the app's own webviews.
 - Platform differences in WebView2 and WKWebView beyond what the documentation states.
 - Dependency audits and the release pipeline beyond the workflow files.
 - Translations.
 
 ## Notes for users
 
-Fixes are in 0.2.2. See the [releases page](https://github.com/Ferdinand99/Nimble-Newt/releases) and
+Fixes for NN-01, NN-03 and NN-04 are in 0.2.2; the NN-02 fix and the timeout part of NN-05 are in 0.3.0. See the [releases page](https://github.com/Ferdinand99/Nimble-Newt/releases) and
 [updates](updates.md).
 
 - Replace in folder now skips files that are not valid in their detected encoding and tells you which ones; it also
   refuses files that changed after the preview, so run the search again.
 - Opening a FIFO, device or directory as a file is refused.
-- Extensions: see the WebRTC note above before installing any extension with the `editor.read` permission.
+- Extensions: from 0.3.0 their code runs in a Web Worker, which closes the WebRTC route (NN-02). Extensions that used
+  `window` or `document` stop working. Before 0.3.0, be careful with any extension that has the `editor.read`
+  permission.
