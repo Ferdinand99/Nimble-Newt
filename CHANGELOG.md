@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/Ferdinand99/Nimble-Newt/compare/v0.2.2...v0.3.0) (2026-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* extension code now runs in a Web Worker, so it has no `window` or `document`. Extensions that used them stop working. The nimble v1 API is unchanged, and setTimeout, Promise and JSON stay available.
+
+### Bug Fixes
+
+* run extensions in a worker so they have no way out (NN-02) ([#30](https://github.com/Ferdinand99/Nimble-Newt/issues/30)) ([cd2449d](https://github.com/Ferdinand99/Nimble-Newt/commit/cd2449defa511192bedfa907fb03b173d8d5ddc5))
+
 ## [0.2.2](https://github.com/Ferdinand99/Nimble-Newt/compare/v0.2.1...v0.2.2) (2026-10-27)
 
 
