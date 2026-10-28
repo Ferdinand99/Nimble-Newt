@@ -13,6 +13,8 @@ export const LIMITS = {
   valueChars: 64 * 1024,
   callsPerSecond: 200,
   commandTimeoutMs: 10_000,
+  /** The sandbox iframe owns the command timeout; the app's own clock runs this much longer, as a backstop. */
+  commandBackstopMs: 2_000,
   startTimeoutMs: 5_000,
 } as const;
 
@@ -123,12 +125,26 @@ export function escapeInlineScript(code: string): string {
   return code.replace(/<\/(script)/gi, "<\\/$1").replace(/<!--/g, "<\\!--");
 }
 
-/** The srcdoc of an extension's sandbox: a locked-down CSP, our bootstrap and then the extension's script. */
-export function buildSrcdoc(bootstrap: string, code: string): string {
+/**
+ * The policy of every sandbox document, as the `nnext` scheme header (src-tauri/src/sandbox.rs, kept equal by a test)
+ * and as a meta tag in the document itself. Nothing is opened except inline script and blob workers: no connect-src,
+ * frame-src or img-src, so the sandbox cannot load or send anything. A blob worker inherits this policy.
+ */
+export const SANDBOX_CSP = "default-src 'none'; script-src 'unsafe-inline'; worker-src blob:";
+
+/** A JSON string that is safe inside an inline <script>: `<` never appears literally, so no tag or comment can start. */
+const jsonForScript = (v: unknown): string => JSON.stringify(v).replace(/</g, "\\u003c");
+
+/**
+ * The document of an extension's sandbox: the policy, then our iframe bootstrap. The extension's script is not run in
+ * the document at all; it travels as a string (`workerSource`: worker bootstrap + extension script) and the iframe
+ * bootstrap starts it in a blob worker.
+ */
+export function buildSrcdoc(iframeBootstrap: string, workerSource: string, commandTimeoutMs: number = LIMITS.commandTimeoutMs): string {
   return [
     "<!doctype html><html><head><meta charset=\"utf-8\">",
-    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'\">",
-    `</head><body><script>${escapeInlineScript(bootstrap)}</script>`,
-    `<script>${escapeInlineScript(code)}</script></body></html>`,
+    `<meta http-equiv="Content-Security-Policy" content="${SANDBOX_CSP}">`,
+    `</head><body><script>var NN_WORKER_SOURCE=${jsonForScript(workerSource)};var NN_COMMAND_TIMEOUT_MS=${Math.trunc(commandTimeoutMs)};</script>`,
+    `<script>${escapeInlineScript(iframeBootstrap)}</script></body></html>`,
   ].join("");
 }

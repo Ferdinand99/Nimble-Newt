@@ -63,16 +63,34 @@ describe("RateLimiter", () => {
 });
 
 describe("srcdoc", () => {
+  const worker = "WORKER_SOURCE";
   it("cannot be broken out of with a closing script tag", () => {
     const evil = 'var s = "</script><img src=x onerror=alert(1)>"; </SCRIPT ><!-- x';
-    const doc = buildSrcdoc("boot();", evil);
+    const doc = buildSrcdoc("boot();", worker + evil);
     expect(doc.match(/<\/script>/gi)?.length).toBe(2); // only our own two closing tags
     expect(doc).not.toMatch(/<!--/);
+    expect(doc).not.toContain("<img");
     expect(escapeInlineScript("a</script>b")).toBe("a<\\/script>b");
   });
-  it("starts with a policy that blocks all network and resources", () => {
+  it("hands the extension's script over as a string that round-trips exactly", () => {
+    const nasty = 'a</script>b<!--c--> `${x}` "q" \\ \u2028 \n é';
+    const doc = buildSrcdoc("boot();", nasty);
+    const m = /var NN_WORKER_SOURCE=(.*?);var NN_COMMAND_TIMEOUT_MS=/s.exec(doc);
+    expect(JSON.parse(m![1])).toBe(nasty);
+  });
+  it("runs only our bootstrap in the document; the extension's script is data, not a script element", () => {
+    const doc = buildSrcdoc("boot();", "EXTENSION_CODE();");
+    expect(doc.match(/<script>/g)?.length).toBe(2);
+    expect(doc.split("<script>")[2]).toBe("boot();</script></body></html>");
+  });
+  it("tells the bootstrap the command timeout", () => {
+    expect(buildSrcdoc("", "")).toContain(`var NN_COMMAND_TIMEOUT_MS=${LIMITS.commandTimeoutMs};`);
+    expect(buildSrcdoc("", "", 400.7)).toContain("var NN_COMMAND_TIMEOUT_MS=400;");
+  });
+  it("starts with a policy that blocks all network and resources, and allows only the blob worker", () => {
     const doc = buildSrcdoc("", "");
     expect(doc).toContain("default-src 'none'");
+    expect(doc).toContain("worker-src blob:");
     expect(doc).not.toContain("connect-src");
     expect(doc.indexOf("Content-Security-Policy")).toBeLessThan(doc.indexOf("<script>"));
   });
