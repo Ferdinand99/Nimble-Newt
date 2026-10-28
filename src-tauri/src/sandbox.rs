@@ -11,8 +11,12 @@ use tauri::http::{header, Response, StatusCode};
 
 pub const SCHEME: &str = "nnext";
 
-/// The CSP of every sandbox document: no network, no frames, no media, only inline script.
-pub const CSP: &str = "default-src 'none'; script-src 'unsafe-inline'";
+/// The CSP of every sandbox document: no network, no frames, no media; only inline script and blob workers.
+///
+/// The extension's script runs in a dedicated Web Worker started from a `blob:` URL, and a worker has no WebRTC
+/// and no DOM (see docs/extensions.md). The worker inherits this policy, so `fetch`, `WebSocket`, `importScripts`
+/// and the like are blocked inside it too. Keep this equal to `SANDBOX_CSP` in src/ext/protocol.ts (a test checks).
+pub const CSP: &str = "default-src 'none'; script-src 'unsafe-inline'; worker-src blob:";
 
 #[derive(Default)]
 pub struct SandboxDocs {
@@ -83,11 +87,21 @@ mod tests {
         assert_ne!(a, b);
     }
 
+    fn directives() -> HashMap<&'static str, Vec<&'static str>> {
+        CSP.split(';')
+            .map(|d| {
+                let mut parts = d.split_whitespace();
+                (parts.next().unwrap(), parts.collect::<Vec<_>>())
+            })
+            .collect()
+    }
+
     #[test]
     fn the_csp_allows_no_network_and_no_frames() {
         for bad in [
             "connect-src",
             "frame-src",
+            "img-src",
             "https:",
             "http:",
             "*",
@@ -97,5 +111,14 @@ mod tests {
             assert!(!CSP.contains(bad), "{bad}");
         }
         assert!(CSP.starts_with("default-src 'none'"));
+    }
+
+    #[test]
+    fn the_csp_opens_nothing_but_inline_script_and_blob_workers() {
+        let d = directives();
+        assert_eq!(d.len(), 3, "{CSP}");
+        assert_eq!(d["default-src"], ["'none'"]);
+        assert_eq!(d["script-src"], ["'unsafe-inline'"]);
+        assert_eq!(d["worker-src"], ["blob:"]);
     }
 }

@@ -1,0 +1,14 @@
+{
+  "id": "dev.nimblenewt.nn02check",
+  "name": "NN-02 check",
+  "version": "1.0.0",
+  "description": "Test extension: tries to get data out of the sandbox (network, WebRTC, workers) against 127.0.0.1 only and reports green if everything is blocked.",
+  "author": "Nimble Newt",
+  "minAppVersion": "0.2.0",
+  "main": "main.js",
+  "permissions": ["ui"],
+  "contributes": {
+    "commands": [{ "id": "check", "title": "NN-02 check" }],
+    "menus": [{ "command": "check", "menu": "tools" }]
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSrcdoc, checkRequest, escapeInlineScript, LIMITS, METHOD_PERMISSION, PERMISSIONS, RateLimiter, type Permission } from "./protocol";
+import { buildSrcdoc, checkEvent, checkReply, checkRequest, escapeInlineScript, LIMITS, METHOD_PERMISSION, PERMISSIONS, RateLimiter, type Permission } from "./protocol";
 
 const all: Permission[] = [...PERMISSIONS];
 const req = (method: string, params: Record<string, unknown> = {}, granted: Permission[] = all, id = 1) => checkRequest({ id, method, params }, granted);
@@ -63,17 +63,75 @@ describe("RateLimiter", () => {
 });
 
 describe("srcdoc", () => {
+  const worker = "WORKER_SOURCE";
   it("cannot be broken out of with a closing script tag", () => {
     const evil = 'var s = "</script><img src=x onerror=alert(1)>"; </SCRIPT ><!-- x';
-    const doc = buildSrcdoc("boot();", evil);
+    const doc = buildSrcdoc("boot();", worker + evil);
     expect(doc.match(/<\/script>/gi)?.length).toBe(2); // only our own two closing tags
     expect(doc).not.toMatch(/<!--/);
+    expect(doc).not.toContain("<img");
     expect(escapeInlineScript("a</script>b")).toBe("a<\\/script>b");
   });
-  it("starts with a policy that blocks all network and resources", () => {
+  it("hands the extension's script over as a string that round-trips exactly", () => {
+    const nasty = 'a</script>b<!--c--> `${x}` "q" \\ \u2028 \n é';
+    const doc = buildSrcdoc("boot();", nasty);
+    const m = /var NN_WORKER_SOURCE=(.*?);var NN_COMMAND_TIMEOUT_MS=/s.exec(doc);
+    expect(JSON.parse(m![1])).toBe(nasty);
+  });
+  it("runs only our bootstrap in the document; the extension's script is data, not a script element", () => {
+    const doc = buildSrcdoc("boot();", "EXTENSION_CODE();");
+    expect(doc.match(/<script>/g)?.length).toBe(2);
+    expect(doc.split("<script>")[2]).toBe("boot();</script></body></html>");
+  });
+  it("tells the bootstrap the command timeout and the heartbeat", () => {
+    const doc = buildSrcdoc("", "");
+    expect(doc).toContain(`var NN_COMMAND_TIMEOUT_MS=${LIMITS.commandTimeoutMs};`);
+    expect(doc).toContain(`var NN_PING_MS=${LIMITS.heartbeatMs};`);
+    expect(doc).toContain(`var NN_UNRESPONSIVE_MS=${LIMITS.unresponsiveMs};`);
+    const short = buildSrcdoc("", "", { commandTimeoutMs: 400.7, heartbeatMs: 100, unresponsiveMs: 900 });
+    expect(short).toContain("var NN_COMMAND_TIMEOUT_MS=400;");
+    expect(short).toContain("var NN_PING_MS=100;");
+    expect(short).toContain("var NN_UNRESPONSIVE_MS=900;");
+  });
+  it("keeps the heartbeat shorter than the limit it enforces", () => {
+    expect(LIMITS.heartbeatMs).toBeLessThan(LIMITS.unresponsiveMs);
+  });
+  it("starts with a policy that blocks all network and resources, and allows only the blob worker", () => {
     const doc = buildSrcdoc("", "");
     expect(doc).toContain("default-src 'none'");
+    expect(doc).toContain("worker-src blob:");
     expect(doc).not.toContain("connect-src");
     expect(doc.indexOf("Content-Security-Policy")).toBeLessThan(doc.indexOf("<script>"));
+  });
+});
+
+describe("checkEvent", () => {
+  it("accepts the events the iframe reports and cuts their text", () => {
+    expect(checkEvent({ event: "ready", x: 1 })).toEqual({ event: "ready" });
+    expect(checkEvent({ event: "unresponsive" })).toEqual({ event: "unresponsive" });
+    expect(checkEvent({ event: "timeout", id: 4 })).toEqual({ event: "timeout", id: 4 });
+    expect(checkEvent({ event: "error", message: "m" })).toEqual({ event: "error", message: "m" });
+    expect(checkEvent({ event: "worker-failed", message: "x".repeat(10_000) })).toEqual({ event: "worker-failed", message: "x".repeat(LIMITS.eventChars) });
+    expect(checkEvent({ event: "error", message: { toString: () => "evil" } })).toEqual({ event: "error", message: "" });
+    expect(checkEvent({ event: "error" })).toEqual({ event: "error", message: "" });
+  });
+  it("rejects what is not an event, including prototype tricks", () => {
+    for (const bad of [{ event: "beat" }, { event: "constructor" }, { event: "__proto__" }, { event: 5 }, { event: "timeout" }, { event: "timeout", id: "1" }, { event: "timeout", id: 1.5 }, {}]) {
+      expect(checkEvent(bad as Record<string, unknown>), JSON.stringify(bad)).toBeNull();
+    }
+  });
+});
+
+describe("checkReply", () => {
+  it("accepts a success with a null result and an error with text", () => {
+    expect(checkReply({ id: 1, result: null })).toEqual({ id: 1 });
+    expect(checkReply({ id: 2, error: "bad" })).toEqual({ id: 2, error: "bad" });
+    expect(checkReply({ id: 2, error: "" })).toEqual({ id: 2, error: "" });
+    expect(checkReply({ id: 2, error: "e".repeat(10_000) })).toEqual({ id: 2, error: "e".repeat(LIMITS.eventChars) });
+  });
+  it("rejects anything else", () => {
+    for (const bad of [{ id: 1 }, { id: 1, result: "x" }, { id: 1, result: { big: 1 } }, { id: 1, error: 5 }, { id: 1, error: { x: 1 } }, { id: "1", result: null }, { id: 1.5, result: null }, { id: 1, method: "x", result: null }, { result: null }]) {
+      expect(checkReply(bad as Record<string, unknown>), JSON.stringify(bad)).toBeNull();
+    }
   });
 });

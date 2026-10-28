@@ -8,9 +8,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e",
+    "lint": "eslint src e2e playwright.config.ts",
     "test": "vitest run",
+    "test:sandbox": "playwright test",
     "tauri": "tauri",
     "build:unsigned": "tauri build --config src-tauri/tauri.unsigned.conf.json"
   },
@@ -52,6 +53,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10",
+    "@playwright/test": "^1.60.0",
     "@tauri-apps/cli": "^2",
     "@types/node": "^26.6.5",
     "eslint": "^10",

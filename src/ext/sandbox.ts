@@ -1,13 +1,17 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { api } from "../lib/api";
 import { h } from "../lib/dom";
-import { BOOTSTRAP } from "./bootstrap";
-import { buildSrcdoc, checkRequest, LIMITS, RateLimiter, type Permission } from "./protocol";
+import { sandboxDocument } from "./document";
+import { checkEvent, checkReply, checkRequest, LIMITS, RateLimiter, type Permission } from "./protocol";
 import { TimerGroup } from "./timers";
 
 export type ApiHandler = (method: string, params: Record<string, unknown>) => Promise<unknown>;
 
-/** One running extension: a hidden sandboxed iframe plus the plumbing to talk to it. */
+/**
+ * One running extension: a hidden sandboxed iframe plus the plumbing to talk to it. The extension's script runs in a
+ * Web Worker that the iframe starts (see bootstrap.ts). The iframe also owns the command timeout and terminates the
+ * worker when it is exceeded. This class validates every message and keeps its own, longer clock as a backstop.
+ */
 export class Sandbox {
   private frame: HTMLIFrameElement | null = null;
   private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; cancel: () => void }>();
@@ -17,6 +21,7 @@ export class Sandbox {
   private limiter = new RateLimiter();
   private registered = new Set<string>();
   private ready: Promise<void> | null = null;
+  private failStart: ((e: Error, reason: string) => void) | null = null;
   private onMessage = (ev: MessageEvent) => void this.receive(ev);
   lastError: string | null = null;
 
@@ -35,35 +40,36 @@ export class Sandbox {
     return this.registered.has(local);
   }
 
-  /** Creates the iframe and waits until the bootstrap reports ready. */
+  /** Creates the iframe and waits until the worker bootstrap reports ready. */
   start(): Promise<void> {
     if (this.ready) return this.ready;
     this.ready = new Promise<void>((resolve, reject) => {
-      const cancel = this.timers.add(LIMITS.startTimeoutMs, () => {
-        this.kill("start-timeout");
-        reject(new Error("The extension did not start in time."));
-      });
+      const cancel = this.timers.add(LIMITS.startTimeoutMs, () => this.failStart?.(new Error("The extension did not start in time."), "start-timeout"));
+      this.failStart = (e, reason) => {
+        cancel();
+        this.failStart = null;
+        reject(e);
+        this.kill(reason);
+      };
       this.readyHook = () => {
         cancel();
+        this.failStart = null;
         resolve();
       };
       window.addEventListener("message", this.onMessage);
       // The document is served by the app from its own URI scheme with its own CSP (no network, only inline
-      // script); a srcdoc frame would inherit the app's stricter CSP and its scripts would never run.
-      // sandbox without allow-same-origin: opaque origin, no access to the app.
+      // script and blob workers); a frame with an inline document would inherit the app's stricter CSP and its
+      // scripts would never run. sandbox without allow-same-origin: opaque origin, no access to the app. The
+      // extension's script does not run in the document but in a worker the document starts.
       api
-        .sandboxStage(buildSrcdoc(BOOTSTRAP, this.code))
+        .sandboxStage(sandboxDocument(this.code))
         .then((id) => {
           if (!this.ready) return void api.sandboxRelease(id).catch(() => {});
           this.docId = id;
           this.frame = h("iframe", { sandbox: "allow-scripts", src: convertFileSrc(id, "nnext"), "aria-hidden": "true", tabIndex: -1, title: `extension ${this.extId}`, style: "display:none" });
           document.body.append(this.frame);
         })
-        .catch((e) => {
-          cancel();
-          this.kill("start-failed");
-          reject(e instanceof Error ? e : new Error(String(e)));
-        });
+        .catch((e) => this.failStart?.(e instanceof Error ? e : new Error(String(e)), "start-failed"));
     });
     return this.ready;
   }
@@ -72,28 +78,26 @@ export class Sandbox {
   private async receive(ev: MessageEvent): Promise<void> {
     if (!this.frame || ev.source !== this.frame.contentWindow) return;
     const data = ev.data as Record<string, unknown> | null;
-    if (!data || typeof data !== "object") return;
-    if (data.event === "ready") return void this.readyHook?.();
-    if (data.event === "error") {
-      this.lastError = String(data.message ?? "").slice(0, 300);
-      return;
-    }
-    // A reply to something we asked (a command run).
-    if (!("method" in data)) {
-      const p = this.pending.get(data.id as number);
-      if (!p) return;
-      this.pending.delete(data.id as number);
-      p.cancel();
-      if (data.error) p.reject(new Error(String(data.error).slice(0, 300)));
-      else p.resolve(data.result);
-      return;
-    }
-    // A call from the extension.
-    const id = data.id as number;
+    if (!data || typeof data !== "object" || Array.isArray(data)) return;
+    // Every message counts, whatever it is: a flood of events or replies is stopped like a flood of calls.
     if (!this.limiter.allow()) {
       this.kill("rate-limit");
       return;
     }
+    if (typeof data.event === "string") return this.onEvent(data);
+    // A reply to something we asked (a command run).
+    if (!("method" in data)) {
+      const r = checkReply(data);
+      const p = r && this.pending.get(r.id);
+      if (!r || !p) return;
+      this.pending.delete(r.id);
+      p.cancel();
+      if (r.error !== undefined) p.reject(new Error(r.error));
+      else p.resolve(null);
+      return;
+    }
+    // A call from the extension.
+    const id = data.id as number;
     const checked = checkRequest(data, this.granted);
     if (!checked.ok) return this.reply(id, undefined, checked.error);
     try {
@@ -107,30 +111,88 @@ export class Sandbox {
     }
   }
 
+  /** What the iframe reports about itself (see bootstrap.ts). The worker cannot send these: the iframe drops them. */
+  private onEvent(data: Record<string, unknown>): void {
+    const e = checkEvent(data);
+    if (!e) return;
+    switch (e.event) {
+      case "ready":
+        return void this.readyHook?.();
+      case "error":
+        this.lastError = e.message;
+        return;
+      // The worker could not be created, or the extension's script does not parse.
+      case "worker-failed":
+        this.lastError = e.message;
+        this.failStart?.(new Error(e.message || "The extension script could not be loaded."), "start-failed");
+        return;
+      // The iframe's command clock ran out and it terminated the worker.
+      case "timeout":
+        if (this.pending.has(e.id)) this.expire(e.id);
+        return;
+      // The worker did not answer the heartbeat (a loop that never ends outside a command) and was terminated.
+      case "unresponsive":
+        this.lastError = "The extension stopped responding.";
+        this.failStart?.(new Error(this.lastError), "unresponsive");
+        this.stopPending("The extension stopped responding and was stopped.");
+        this.kill("unresponsive");
+        return;
+    }
+  }
+
+  private stopPending(message: string): void {
+    for (const p of this.pending.values()) {
+      p.cancel();
+      p.reject(new Error(message));
+    }
+    this.pending.clear();
+  }
+
   private reply(id: number, result?: unknown, error?: string): void {
     this.frame?.contentWindow?.postMessage(error ? { id, error } : { id, result: result ?? null }, "*");
   }
 
-  /** Runs a registered command; the run is abandoned (and the sandbox killed) after the timeout. */
+  /** A command ran out of time: the extension is stopped and its caller gets an error. */
+  private expire(id: number): void {
+    const p = this.pending.get(id);
+    this.pending.delete(id);
+    p?.cancel();
+    p?.reject(new Error("The command took too long and the extension was stopped."));
+    this.kill("command-timeout");
+  }
+
+  /**
+   * Runs a registered command. The iframe times it (see bootstrap.ts) and terminates the worker when the time is up;
+   * this class keeps a longer clock of its own in case the iframe never reports. Either way the sandbox is killed
+   * and the extension is disabled.
+   */
   run(command: string, context: Record<string, unknown> = {}): Promise<void> {
     const w = this.frame?.contentWindow;
     if (!w) return Promise.reject(new Error("The extension is not running."));
     return new Promise<void>((resolve, reject) => {
       const id = this.nextId++;
-      // The clock stops while a dialog opened by the extension is on screen (see `hold`).
-      const cancel = this.timers.add(LIMITS.commandTimeoutMs, () => {
-        this.pending.delete(id);
-        this.kill("command-timeout");
-        reject(new Error("The command took too long and the extension was stopped."));
-      });
+      // Both clocks stop while a dialog opened by the extension is on screen (see `hold`).
+      const cancel = this.timers.add(LIMITS.commandTimeoutMs + LIMITS.commandBackstopMs, () => this.expire(id));
       this.pending.set(id, { resolve: () => resolve(), reject, cancel });
       w.postMessage({ id, method: "command.run", params: { command, context } }, "*");
     });
   }
 
-  /** Pauses the command timeout until the returned function is called (for dialogs waiting on the user). */
+  /** Pauses the command timeout, in the iframe and here, until the returned function is called (for dialogs waiting on the user). */
   hold(): () => void {
-    return this.timers.hold();
+    const release = this.timers.hold();
+    this.control("hold");
+    let done = false;
+    return () => {
+      if (done) return;
+      done = true;
+      release();
+      this.control("release");
+    };
+  }
+
+  private control(control: "hold" | "release"): void {
+    this.frame?.contentWindow?.postMessage({ control }, "*");
   }
 
   kill(reason = "stopped"): void {
@@ -139,6 +201,7 @@ export class Sandbox {
     this.frame?.remove();
     this.frame = null;
     this.ready = null;
+    this.failStart = null;
     this.timers.clear();
     if (this.docId) void api.sandboxRelease(this.docId).catch(() => {});
     this.docId = null;
