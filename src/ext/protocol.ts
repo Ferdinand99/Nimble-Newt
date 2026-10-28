@@ -16,6 +16,11 @@ export const LIMITS = {
   /** The sandbox iframe owns the command timeout; the app's own clock runs this much longer, as a backstop. */
   commandBackstopMs: 2_000,
   startTimeoutMs: 5_000,
+  /** The iframe pings the worker this often; a worker that has not answered a ping after `unresponsiveMs` is terminated. */
+  heartbeatMs: 2_000,
+  unresponsiveMs: 5_000,
+  /** Longest text of an `error` or `worker-failed` event the app keeps. */
+  eventChars: 300,
 } as const;
 
 /** Which permission a method needs; `null` means no permission is needed. Unknown methods are not listed. */
@@ -108,6 +113,37 @@ export function checkRequest(data: unknown, granted: readonly Permission[]): Che
   return { ok: true, req: { id, method, params } };
 }
 
+/** What the sandbox iframe reports about itself, after `checkEvent`. */
+export type SandboxEvent =
+  | { event: "ready" }
+  | { event: "error" | "worker-failed"; message: string }
+  | { event: "timeout"; id: number }
+  | { event: "unresponsive" };
+
+/** Validates a message with an `event` field; anything else, or anything malformed, is `null` and gets dropped. */
+export function checkEvent(data: Record<string, unknown>): SandboxEvent | null {
+  switch (data.event) {
+    case "ready":
+    case "unresponsive":
+      return { event: data.event };
+    case "error":
+    case "worker-failed":
+      return { event: data.event, message: typeof data.message === "string" ? data.message.slice(0, LIMITS.eventChars) : "" };
+    case "timeout":
+      return Number.isSafeInteger(data.id) ? { event: "timeout", id: data.id as number } : null;
+    default:
+      return null;
+  }
+}
+
+/** Validates the answer to a command run: `{ id, result: null }` or `{ id, error }`. Nothing else is a reply. */
+export function checkReply(data: Record<string, unknown>): { id: number; error?: string } | null {
+  if (!Number.isSafeInteger(data.id) || "method" in data) return null;
+  if (typeof data.error === "string") return { id: data.id as number, error: data.error.slice(0, LIMITS.eventChars) };
+  if ("error" in data && data.error !== undefined) return null;
+  return data.result === null ? { id: data.id as number } : null;
+}
+
 /** Sliding-window limiter: at most `max` calls in any `windowMs`. */
 export class RateLimiter {
   private times: number[] = [];
@@ -140,11 +176,23 @@ const jsonForScript = (v: unknown): string => JSON.stringify(v).replace(/</g, "\
  * the document at all; it travels as a string (`workerSource`: worker bootstrap + extension script) and the iframe
  * bootstrap starts it in a blob worker.
  */
-export function buildSrcdoc(iframeBootstrap: string, workerSource: string, commandTimeoutMs: number = LIMITS.commandTimeoutMs): string {
+export interface SandboxTimes {
+  commandTimeoutMs?: number;
+  heartbeatMs?: number;
+  unresponsiveMs?: number;
+}
+
+export function buildSrcdoc(iframeBootstrap: string, workerSource: string, times: SandboxTimes = {}): string {
+  const ms = (v: number | undefined, d: number) => Math.max(1, Math.trunc(v ?? d));
+  const config =
+    `var NN_WORKER_SOURCE=${jsonForScript(workerSource)};` +
+    `var NN_COMMAND_TIMEOUT_MS=${ms(times.commandTimeoutMs, LIMITS.commandTimeoutMs)};` +
+    `var NN_PING_MS=${ms(times.heartbeatMs, LIMITS.heartbeatMs)};` +
+    `var NN_UNRESPONSIVE_MS=${ms(times.unresponsiveMs, LIMITS.unresponsiveMs)};`;
   return [
     "<!doctype html><html><head><meta charset=\"utf-8\">",
     `<meta http-equiv="Content-Security-Policy" content="${SANDBOX_CSP}">`,
-    `</head><body><script>var NN_WORKER_SOURCE=${jsonForScript(workerSource)};var NN_COMMAND_TIMEOUT_MS=${Math.trunc(commandTimeoutMs)};</script>`,
+    `</head><body><script>${config}</script>`,
     `<script>${escapeInlineScript(iframeBootstrap)}</script></body></html>`,
   ].join("");
 }

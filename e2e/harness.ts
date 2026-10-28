@@ -13,8 +13,9 @@ import dgram from "node:dgram";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
-import { checkRequest, SANDBOX_CSP, type Permission } from "../src/ext/protocol";
+import { IFRAME_BOOTSTRAP, WORKER_API, WORKER_HEARTBEAT } from "../src/ext/bootstrap";
 import { sandboxDocument } from "../src/ext/document";
+import { buildSrcdoc, checkRequest, SANDBOX_CSP, type Permission, type SandboxTimes } from "../src/ext/protocol";
 
 /** The header the real scheme handler sends: the `CSP` constant of src-tauri/src/sandbox.rs. */
 export const HEADER_CSP = /pub const CSP: &str = "([^"]*)";/.exec(readFileSync(fileURLToPath(new URL("../src-tauri/src/sandbox.rs", import.meta.url)), "utf8"))?.[1] ?? "";
@@ -148,13 +149,17 @@ export interface Editor {
   messages: { text: string; kind?: string }[];
   /** The answer to ui.prompt. */
   promptAnswer: string;
+  /** The extension's storage (permission "storage"). */
+  storage: Map<string, string>;
 }
 
 export interface OpenOptions {
   code: string;
   permissions: Permission[];
-  /** The iframe's command timeout (the app uses 10 s). */
-  commandTimeoutMs?: number;
+  /** The clocks of the iframe (the app uses 10 s, 2 s and 5 s); shorter ones keep the tests quick. */
+  times?: SandboxTimes;
+  /** Leave out the lockdown of the worker bootstrap, to show that the CSP alone holds. Default: the real bootstrap. */
+  lockdown?: boolean;
   /** Serve the document with a different header and meta policy: only for the control that proves the sink works. */
   csp?: string;
   /** Change only the meta tag in the document; the header stays the real one. */
@@ -162,7 +167,7 @@ export interface OpenOptions {
   editor?: Partial<Editor>;
 }
 
-type Spec = { event?: string; reply?: number };
+type Spec = { event?: string; message?: string; reply?: number };
 
 export class Extension {
   readonly editor: Editor;
@@ -172,13 +177,14 @@ export class Extension {
     readonly page: Page,
     editor: Partial<Editor>,
   ) {
-    this.editor = { doc: "", selection: "", edits: [], messages: [], promptAnswer: "https://example.com", ...editor };
+    this.editor = { doc: "", selection: "", edits: [], messages: [], promptAnswer: "https://example.com", storage: new Map(), ...editor };
   }
 
   static async open(page: Page, servers: Servers, o: OpenOptions): Promise<Extension> {
     const ext = new Extension(page, o.editor ?? {});
     await page.exposeFunction("nnHost", (m: unknown) => ext.answer(m, o.permissions));
-    let html = sandboxDocument(o.code, o.commandTimeoutMs);
+    // What the app stages (src/ext/document.ts), or the same without the lockdown part of the worker bootstrap.
+    let html = o.lockdown === false ? buildSrcdoc(IFRAME_BOOTSTRAP, WORKER_HEARTBEAT + WORKER_API + "\n" + o.code, o.times) : sandboxDocument(o.code, o.times);
     const meta = o.csp ?? o.metaCsp;
     if (meta) html = html.replace(SANDBOX_CSP, meta);
     const src = servers.stage(html, o.csp);
@@ -217,6 +223,14 @@ export class Extension {
         return { id, result: e.promptAnswer };
       case "ui.pick":
         return { id, result: (params.items as string[])[0] };
+      case "storage.set":
+        e.storage.set(String(params.key), String(params.value));
+        return { id, result: null };
+      case "storage.get":
+        return { id, result: e.storage.get(String(params.key)) ?? null };
+      case "storage.remove":
+        e.storage.delete(String(params.key));
+        return { id, result: null };
       default:
         return { id, result: null };
     }
@@ -231,7 +245,7 @@ export class Extension {
   async waitFor(spec: Spec, ms = 15_000): Promise<Record<string, unknown> | null> {
     const handle = await this.page
       .waitForFunction(
-        (s) => (window as unknown as { __msgs: Record<string, unknown>[] }).__msgs.find((m) => !!m && typeof m === "object" && (s.event !== undefined ? m.event === s.event : !("method" in m) && m.id === s.reply && ("result" in m || "error" in m))) ?? null,
+        (s) => (window as unknown as { __msgs: Record<string, unknown>[] }).__msgs.find((m) => !!m && typeof m === "object" && (s.event !== undefined ? m.event === s.event && (s.message === undefined || m.message === s.message) : !("method" in m) && m.id === s.reply && ("result" in m || "error" in m))) ?? null,
         spec,
         { timeout: ms, polling: 20 },
       )
@@ -262,9 +276,9 @@ export class Extension {
     return this.page.evaluate((x) => (window as unknown as { nnSend(m: unknown): void }).nnSend(x), m);
   }
 
-  /** Whether the extension's `event` message arrived. */
-  async count(event: string): Promise<number> {
-    return (await this.messages()).filter((m) => m.event === event).length;
+  /** How many `event` messages (with this text, if given) have arrived. */
+  async count(event: string, message?: string): Promise<number> {
+    return (await this.messages()).filter((m) => m.event === event && (message === undefined || m.message === message)).length;
   }
 
   broadcastReceived(): Promise<unknown[]> {

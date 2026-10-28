@@ -6,9 +6,9 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { expect, test as base } from "@playwright/test";
+import { expect, test as base, type Page } from "@playwright/test";
 import { BUILTIN } from "../src/ext/builtin";
-import { Extension, HEADER_CSP, startServers, startSink, type Servers, type Sink } from "./harness";
+import { Extension, HEADER_CSP, startServers, startSink, type OpenOptions, type Servers, type Sink } from "./harness";
 
 const payload = (name: string, sinkPort = 0) => readFileSync(fileURLToPath(new URL(`./payloads/${name}`, import.meta.url)), "utf8").replaceAll("__SINK_PORT__", String(sinkPort));
 
@@ -35,16 +35,17 @@ interface Attempt {
   detail: string;
 }
 
-async function runAttack(page: import("@playwright/test").Page, servers: Servers, sink: Sink, csp?: string): Promise<{ results: Attempt[]; ext: Extension }> {
-  const ext = await Extension.open(page, servers, { code: payload("attack.js", sink.port), permissions: ["editor.read", "ui"], csp });
-  const done = await ext.waitFor({ event: "attack-done" }, 90_000);
-  if (!done) throw new Error(`the attack never finished: ${JSON.stringify((await ext.messages()).slice(0, 10))}`);
+async function runAttack(page: Page, servers: Servers, sink: Sink, opts: Partial<OpenOptions> = {}): Promise<{ results: Attempt[]; ext: Extension }> {
+  const ext = await Extension.open(page, servers, { code: payload("attack.js", sink.port), permissions: ["editor.read", "ui", "storage"], ...opts });
+  await expect.poll(() => ext.editor.storage.has("attack"), { timeout: 90_000, message: "the attack never finished" }).toBe(true);
   // Give anything that is still in flight (a late connection, a beacon) time to show up at the sink.
   await page.waitForTimeout(700);
-  const results = (done as { results: Attempt[] }).results;
+  const results = JSON.parse(ext.editor.storage.get("attack")!) as Attempt[];
   if (process.env.NN_E2E_VERBOSE) console.log(results.map((r) => `${r.outcome.padEnd(9)} ${r.name}: ${r.detail}`).join("\n"));
   return { results, ext };
 }
+
+const WEBRTC_AND_DOM = ["RTCPeerConnection", "webkitRTCPeerConnection", "RTCSessionDescription", "RTCIceCandidate", "window", "document", "parent"];
 
 test.describe("the sandbox keeps extension code from sending anything out", () => {
   test("the header the app serves is the policy the test relies on", () => {
@@ -61,18 +62,19 @@ test.describe("the sandbox keeps extension code from sending anything out", () =
       expect(r, `${name} was tried`).toBeDefined();
       expect(["blocked", "n/a"], `${name}: ${r?.detail}`).toContain(r?.outcome);
     }
-    // The ones every engine must actively refuse, not merely lack.
-    for (const name of ["fetch", "fetch no-cors", "fetch keepalive", "XMLHttpRequest", "WebSocket", "EventSource", "importScripts", "import()", "nested Worker (blob)"]) {
-      expect(by(name)?.outcome, name).toBe("blocked");
-    }
+    // import() is the one that cannot be removed from the worker, so the policy itself must refuse it.
+    expect(by("import()")?.outcome).toBe("blocked");
     expect(results.filter((r) => r.outcome === "LEAK" || r.outcome === "DEFINED"), "no attempt worked").toEqual([]);
 
-    // There is no WebRTC and no DOM in a worker, also in a worker the extension makes itself.
-    for (const name of ["RTCPeerConnection", "webkitRTCPeerConnection", "RTCSessionDescription", "RTCIceCandidate", "window", "document", "parent"]) {
-      expect(by(`typeof ${name}`)?.outcome, name).toBe("undefined");
+    // The network APIs are gone from the extension's point of view, and nothing is left on the prototype chains.
+    for (const name of ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "WebTransport", "importScripts", "Worker", "SharedWorker", "navigator.sendBeacon"]) {
+      expect(by(`lockdown typeof ${name}`)?.outcome, name).toBe("undefined");
     }
+    expect(by("lockdown prototype chain holds no original")?.outcome).toBe("undefined");
+
+    // There is no WebRTC and no DOM in a worker.
+    for (const name of WEBRTC_AND_DOM) expect(by(`typeof ${name}`)?.outcome, name).toBe("undefined");
     expect(by("new RTCPeerConnection()")?.outcome).toBe("blocked");
-    expect(by("nested Worker: typeof RTCPeerConnection")?.outcome).toBe("undefined");
 
     // The strongest evidence: not one connection, request, upgrade or packet arrived.
     expect(sink.hits).toEqual([]);
@@ -80,9 +82,31 @@ test.describe("the sandbox keeps extension code from sending anything out", () =
     expect(await ext.broadcastReceived()).toEqual([]);
   });
 
-  test("control: the same attack gets out when the policy is loosened, so the sink would have seen it", async ({ page, servers, sink }) => {
+  test("the policy alone holds: with the lockdown left out, every way out still fails and a worker made by the extension is confined", async ({ page, servers, sink }) => {
+    const { results, ext } = await runAttack(page, servers, sink, { lockdown: false });
+    const by = (name: string) => results.find((r) => r.name === name);
+
+    // Here the APIs exist, so each must have been actively refused.
+    for (const name of ["fetch", "fetch no-cors", "fetch keepalive", "XMLHttpRequest", "WebSocket", "EventSource", "importScripts", "import()", "new Worker(http url)", "new Worker(data: url)"]) {
+      expect(by(name)?.outcome, `${name}: ${by(name)?.detail}`).toBe("blocked");
+    }
+    // A worker the extension creates itself can exist, but it inherits the policy and has no WebRTC.
+    expect(by("nested Worker (blob)")?.outcome, by("nested Worker (blob)")?.detail).toBe("confined");
+    expect(by("nested Worker: typeof RTCPeerConnection")?.outcome).toBe("undefined");
+    expect(["blocked", "n/a"]).toContain(by("WebTransport")?.outcome);
+    // The lockdown did not run, which proves that the part above is the policy's doing.
+    expect(by("lockdown typeof fetch")?.outcome).toBe("DEFINED");
+
+    const leaks = results.filter((r) => !r.name.startsWith("lockdown") && (r.outcome === "LEAK" || r.outcome === "DEFINED"));
+    expect(leaks, "no attempt worked").toEqual([]);
+    for (const name of WEBRTC_AND_DOM) expect(by(`typeof ${name}`)?.outcome, name).toBe("undefined");
+    expect(sink.hits).toEqual([]);
+    expect(await ext.broadcastReceived()).toEqual([]);
+  });
+
+  test("control: the same attack gets out when the policy is loosened (and the lockdown left out), so the sink would have seen it", async ({ page, servers, sink }) => {
     const loose = "default-src * 'unsafe-inline'; script-src * 'unsafe-inline'; connect-src *; worker-src blob:";
-    const { results } = await runAttack(page, servers, sink, loose);
+    const { results } = await runAttack(page, servers, sink, { csp: loose, lockdown: false });
     expect(results.filter((r) => r.outcome === "LEAK").length, JSON.stringify(results)).toBeGreaterThan(2);
     expect(sink.hits.length).toBeGreaterThan(2);
   });
@@ -117,7 +141,7 @@ test.describe("the extension for the manual check", () => {
 
 test.describe("timeout (NN-05)", () => {
   test("terminate() stops a command that never returns, and the app is told", async ({ page, servers }) => {
-    const ext = await Extension.open(page, servers, { code: payload("spin.js"), permissions: [], commandTimeoutMs: 400 });
+    const ext = await Extension.open(page, servers, { code: payload("spin.js"), permissions: [], times: { commandTimeoutMs: 400 } });
     await ext.ready();
     const started = Date.now();
     const outcome = await ext.run("spin");
@@ -126,14 +150,14 @@ test.describe("timeout (NN-05)", () => {
     expect(took).toBeGreaterThanOrEqual(350);
     expect(took).toBeLessThan(5000);
     // The loop is really dead: no more signs of life, however long we wait.
-    const beats = await ext.count("beat");
+    const beats = await ext.count("error", "beat");
     expect(beats).toBeGreaterThan(5);
     await page.waitForTimeout(600);
-    expect(await ext.count("beat")).toBe(beats);
+    expect(await ext.count("error", "beat")).toBe(beats);
   });
 
   test("a command that finishes in time is not touched", async ({ page, servers }) => {
-    const ext = await Extension.open(page, servers, { code: payload("spin.js"), permissions: [], commandTimeoutMs: 1500 });
+    const ext = await Extension.open(page, servers, { code: payload("spin.js"), permissions: [], times: { commandTimeoutMs: 1500 } });
     await ext.ready();
     expect(await ext.run("quick")).toEqual({ ok: true });
     expect(await ext.run("slow")).toEqual({ ok: true });
@@ -141,19 +165,23 @@ test.describe("timeout (NN-05)", () => {
     expect((await ext.messages()).some((m) => m.event === "timeout")).toBe(false);
   });
 
-  test("a slow command is stopped without a hold, and left alone while the app holds the clock", async ({ page, servers }) => {
-    const slow = await Extension.open(page, servers, { code: payload("spin.js"), permissions: [], commandTimeoutMs: 400 });
+  test("a slow command is stopped without a hold, and left alone while the app holds the clock (the heartbeat does not mind either)", async ({ page, servers }) => {
+    const slow = await Extension.open(page, servers, { code: payload("spin.js"), permissions: [], times: { commandTimeoutMs: 400 } });
     await slow.ready();
     expect(await slow.run("slow")).toEqual({ timeout: true });
 
+    // A fast heartbeat: a worker that waits for the app is idle, so it answers and is not taken for stuck.
     const held = await page.context().newPage();
-    const ext = await Extension.open(held, servers, { code: payload("spin.js"), permissions: [], commandTimeoutMs: 400 });
+    const ext = await Extension.open(held, servers, { code: payload("spin.js"), permissions: [], times: { commandTimeoutMs: 400, heartbeatMs: 100, unresponsiveMs: 500 } });
     await ext.ready();
     await ext.send({ control: "hold" });
     expect(await ext.run("slow")).toEqual({ ok: true });
+    await held.waitForTimeout(1500);
     await ext.send({ control: "release" });
     await held.waitForTimeout(900);
-    expect((await ext.messages()).some((m) => m.event === "timeout")).toBe(false);
+    const events = (await ext.messages()).map((m) => m.event);
+    expect(events).not.toContain("timeout");
+    expect(events).not.toContain("unresponsive");
   });
 
   test("a script that does not parse is reported at once", async ({ page, servers }) => {
@@ -164,9 +192,82 @@ test.describe("timeout (NN-05)", () => {
   });
 });
 
+test.describe("a hostile script cannot hide from the timeout (NN-05)", () => {
+  // The extension shares the worker's global, so it can read the command's id, answer early and loop, or loop at the top
+  // level. The command clock cannot see that; the heartbeat can.
+  const quick = { heartbeatMs: 200, unresponsiveMs: 800 };
+
+  /** The worker must be terminated and the app told, exactly once, and the loop must really be dead. */
+  async function expectTerminated(ext: Extension, page: Page) {
+    const told = await ext.waitFor({ event: "unresponsive" }, 15_000);
+    expect(told, "the app was told").not.toBeNull();
+    const beats = await ext.count("error", "beat");
+    expect(beats, "it really was spinning").toBeGreaterThan(5);
+    await page.waitForTimeout(700);
+    expect(await ext.count("error", "beat"), "and it is dead").toBe(beats);
+    expect(await ext.count("unresponsive")).toBe(1);
+  }
+
+  test("answers its command early, then loops for ever", async ({ page, servers }) => {
+    const ext = await Extension.open(page, servers, { code: payload("evade.js"), permissions: [], times: quick });
+    await ext.ready();
+    await expect.poll(() => ext.registered.has("evade")).toBe(true);
+    // The early answer clears the iframe's command clock: the command is "done" as far as the app can tell.
+    expect(await ext.run("evade")).toEqual({ ok: true });
+    await expectTerminated(ext, page);
+  });
+
+  test("loops at the top level after the bootstrap has reported ready", async ({ page, servers }) => {
+    const ext = await Extension.open(page, servers, { code: payload("toplevel.js"), permissions: [], times: quick });
+    await ext.ready();
+    await expectTerminated(ext, page);
+  });
+
+  test("finishes a command normally and leaves a loop behind", async ({ page, servers }) => {
+    const ext = await Extension.open(page, servers, { code: payload("evade.js"), permissions: [], times: quick });
+    await ext.ready();
+    await expect.poll(() => ext.registered.has("late")).toBe(true);
+    expect(await ext.run("late")).toEqual({ ok: true });
+    await expectTerminated(ext, page);
+  });
+
+  test("a step that blocks the worker for less than the limit is fine", async ({ page, servers }) => {
+    const ext = await Extension.open(page, servers, { code: payload("evade.js"), permissions: [], times: { heartbeatMs: 200, unresponsiveMs: 3000 } });
+    await ext.ready();
+    await expect.poll(() => ext.registered.has("block")).toBe(true);
+    expect(await ext.run("block")).toEqual({ ok: true }); // 1.2 s of nothing else
+    await page.waitForTimeout(1500);
+    expect(await ext.run("block")).toEqual({ ok: true });
+    expect((await ext.messages()).some((m) => m.event === "unresponsive" || m.event === "timeout")).toBe(false);
+  });
+});
+
+test.describe("forged messages from the extension", () => {
+  test("do nothing: the iframe drops them, and the clocks still run", async ({ page, servers }) => {
+    const ext = await Extension.open(page, servers, { code: payload("evade.js"), permissions: [], times: { commandTimeoutMs: 600 } });
+    await ext.ready();
+    await expect.poll(() => ext.registered.has("forge") && ext.registered.has("spin")).toBe(true);
+
+    // { event: "timeout" } for an unknown id and for a running one, { event: "worker-failed" } after ready,
+    // { event: "unresponsive" }, { control: "hold" } and { control: "release" } and a pong: all sent by the extension.
+    expect(await ext.run("forge")).toEqual({ ok: true });
+    const seen = (await ext.messages()).filter((m) => typeof m.event === "string");
+    const events = new Set(seen.map((m) => m.event));
+    for (const forged of ["timeout", "worker-failed", "unresponsive"]) expect(events.has(forged), `${forged} did not get through`).toBe(false);
+    expect((await ext.messages()).some((m) => "control" in m), "no control message got through").toBe(false);
+    // What may be passed on (an error text, a second ready) is harmless to the app.
+    expect([...events].every((e) => e === "ready" || e === "error")).toBe(true);
+
+    // A forged hold did not pause the command clock: a command that never returns is still stopped.
+    const started = Date.now();
+    expect(await ext.run("spin")).toEqual({ timeout: true });
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
+});
+
 test.describe("the built-in extensions still work through the worker", () => {
   const builtin = (id: string) => BUILTIN.find((b) => b.manifest.id === id)!;
-  const open = async (page: import("@playwright/test").Page, servers: Servers, id: string, editor: Partial<Extension["editor"]>) => {
+  const open = async (page: Page, servers: Servers, id: string, editor: Partial<Extension["editor"]>) => {
     const b = builtin(id);
     const ext = await Extension.open(page, servers, { code: b.code, permissions: b.manifest.permissions, editor });
     await ext.ready();

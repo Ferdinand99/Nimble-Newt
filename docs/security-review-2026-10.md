@@ -30,7 +30,7 @@ sizes), large-file handling, linear-time regex, and update signature checking ov
 | NN-02 | Medium | Extensions can send data out through WebRTC from the sandbox iframe | Fixed: extensions run in a Web Worker (ships in 0.3.0) |
 | NN-03 | Low | Replace in folder wrote lossily decoded files and had no modification-time check | Fixed in #27 |
 | NN-04 | Low | Folder search was quadratic on long lines | Fixed in #27 |
-| NN-05 | Low | Extension timeouts depend on host timers; storage rate; `ui.*` calls outside commands | Partly fixed: the timeout now terminates the worker (ships in 0.3.0). Open: the storage rate and `ui.*` calls outside commands |
+| NN-05 | Low | Extension timeouts depend on host timers; storage rate; `ui.*` calls outside commands | Partly fixed: the timeout now terminates the worker, also for a script that tries to hide from it (ships in 0.3.0). Open: the storage rate and `ui.*` calls outside commands |
 | NN-06 | Low | Update version not covered by the signature; actions pinned by tag; signing key exposed to the build action | Partly fixed in #27 (actions pinned to commit SHAs). Open: the rest |
 | NN-07 | Info | `extract_zip` panic, install check, FIFOs, plaintext session buffers, `h()` helper trap, test hooks in release builds, optional signing | Partly fixed in #27 (the panic and non-regular files). The other notes are open |
 
@@ -60,6 +60,19 @@ sizes), large-file handling, linear-time regex, and update signature checking ov
 - **NN-05, timeout part, fixed.** The command timeout is now kept by the sandbox iframe, which calls
   `worker.terminate()` when a handler overruns, so a loop that never ends is stopped for real. The app keeps its own
   clock as a backstop and both stand still while a dialog drawn by the app waits for the user.
+  A hostile script shares the worker with our bootstrap, so it can read the command's id, answer early (which clears
+  that clock) and then loop, or loop at the top level. A **heartbeat** closes this: every 2 s the iframe pings the worker
+  with a fresh random nonce, the worker bootstrap answers from a listener registered before the extension runs, and a
+  ping unanswered for 5 s gets the worker terminated and the app told. A script that blocks the worker is stopped within
+  about 8 seconds; a legitimate synchronous step shorter than about 5 s is left alone. A script that stays responsive but
+  busy, or uses a lot of memory, is not covered (CPU and memory use are out of scope).
+- **Hardening in the same change.** The iframe passes on only a well-formed request, reply, `ready` or `error` event
+  from the worker, so a script cannot forge the iframe's own `timeout`, `worker-failed`, `unresponsive` or `hold`
+  messages. The app counts every message from the sandbox against the rate limit, not only calls, and checks events and
+  replies strictly. The worker bootstrap also removes `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`,
+  `WebTransport`, `importScripts`, `Worker`, `SharedWorker` and `navigator.sendBeacon` before the extension runs. That is
+  defence in depth: the content security policy remains the barrier, and the end-to-end check also passes without
+  the removal. The blob URL of the worker is revoked once the worker has started.
 - **Evidence.** A hostile extension tried `fetch` (also `keepalive` and `no-cors`), XHR, WebSocket, EventSource,
   WebTransport, `importScripts`, `import()`, nested and other workers, `sendBeacon` and WebRTC against a listener
   on 127.0.0.1, in Playwright Chromium 148 and WebKit 26.4. The listener saw nothing; a control run with a looser policy

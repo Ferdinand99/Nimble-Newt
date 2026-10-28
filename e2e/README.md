@@ -30,5 +30,7 @@ docker run --rm --ipc=host -v "$PWD":/work -w /work mcr.microsoft.com/playwright
 
 Set `NN_E2E_VERBOSE=1` to print what every attempt of the hostile extension did.
 
-The payloads are in `e2e/payloads/`: `attack.js` (every way out it could think of, aimed at the sink) and `spin.js`
-(commands that never return or take a while).
+The payloads are in `e2e/payloads/`: `attack.js` (every way out it could think of, aimed at the sink), `spin.js` (commands that
+never return or take a while), `evade.js` (answering a command early and then looping, a loop left behind by a finished
+command, a long synchronous step, forged messages) and `toplevel.js` (a loop at the top level). The attack runs twice, with
+the real worker bootstrap and without its lockdown part, so the policy is shown to hold on its own.

@@ -2,7 +2,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { api } from "../lib/api";
 import { h } from "../lib/dom";
 import { sandboxDocument } from "./document";
-import { checkRequest, LIMITS, RateLimiter, type Permission } from "./protocol";
+import { checkEvent, checkReply, checkRequest, LIMITS, RateLimiter, type Permission } from "./protocol";
 import { TimerGroup } from "./timers";
 
 export type ApiHandler = (method: string, params: Record<string, unknown>) => Promise<unknown>;
@@ -78,39 +78,26 @@ export class Sandbox {
   private async receive(ev: MessageEvent): Promise<void> {
     if (!this.frame || ev.source !== this.frame.contentWindow) return;
     const data = ev.data as Record<string, unknown> | null;
-    if (!data || typeof data !== "object") return;
-    if (data.event === "ready") return void this.readyHook?.();
-    if (data.event === "error") {
-      this.lastError = String(data.message ?? "").slice(0, 300);
-      return;
-    }
-    // The worker could not be created, or the extension's script does not parse.
-    if (data.event === "worker-failed") {
-      this.lastError = String(data.message ?? "").slice(0, 300);
-      this.failStart?.(new Error(this.lastError || "The extension script could not be loaded."), "start-failed");
-      return;
-    }
-    // The iframe's clock ran out and it terminated the worker.
-    if (data.event === "timeout") {
-      if (this.pending.has(data.id as number)) this.expire(data.id as number);
-      return;
-    }
-    // A reply to something we asked (a command run).
-    if (!("method" in data)) {
-      const p = this.pending.get(data.id as number);
-      if (!p) return;
-      this.pending.delete(data.id as number);
-      p.cancel();
-      if (data.error) p.reject(new Error(String(data.error).slice(0, 300)));
-      else p.resolve(data.result);
-      return;
-    }
-    // A call from the extension.
-    const id = data.id as number;
+    if (!data || typeof data !== "object" || Array.isArray(data)) return;
+    // Every message counts, whatever it is: a flood of events or replies is stopped like a flood of calls.
     if (!this.limiter.allow()) {
       this.kill("rate-limit");
       return;
     }
+    if (typeof data.event === "string") return this.onEvent(data);
+    // A reply to something we asked (a command run).
+    if (!("method" in data)) {
+      const r = checkReply(data);
+      const p = r && this.pending.get(r.id);
+      if (!r || !p) return;
+      this.pending.delete(r.id);
+      p.cancel();
+      if (r.error !== undefined) p.reject(new Error(r.error));
+      else p.resolve(null);
+      return;
+    }
+    // A call from the extension.
+    const id = data.id as number;
     const checked = checkRequest(data, this.granted);
     if (!checked.ok) return this.reply(id, undefined, checked.error);
     try {
@@ -122,6 +109,43 @@ export class Sandbox {
     } catch (e) {
       this.reply(id, undefined, e instanceof Error ? e.message : String(e));
     }
+  }
+
+  /** What the iframe reports about itself (see bootstrap.ts). The worker cannot send these: the iframe drops them. */
+  private onEvent(data: Record<string, unknown>): void {
+    const e = checkEvent(data);
+    if (!e) return;
+    switch (e.event) {
+      case "ready":
+        return void this.readyHook?.();
+      case "error":
+        this.lastError = e.message;
+        return;
+      // The worker could not be created, or the extension's script does not parse.
+      case "worker-failed":
+        this.lastError = e.message;
+        this.failStart?.(new Error(e.message || "The extension script could not be loaded."), "start-failed");
+        return;
+      // The iframe's command clock ran out and it terminated the worker.
+      case "timeout":
+        if (this.pending.has(e.id)) this.expire(e.id);
+        return;
+      // The worker did not answer the heartbeat (a loop that never ends outside a command) and was terminated.
+      case "unresponsive":
+        this.lastError = "The extension stopped responding.";
+        this.failStart?.(new Error(this.lastError), "unresponsive");
+        this.stopPending("The extension stopped responding and was stopped.");
+        this.kill("unresponsive");
+        return;
+    }
+  }
+
+  private stopPending(message: string): void {
+    for (const p of this.pending.values()) {
+      p.cancel();
+      p.reject(new Error(message));
+    }
+    this.pending.clear();
   }
 
   private reply(id: number, result?: unknown, error?: string): void {

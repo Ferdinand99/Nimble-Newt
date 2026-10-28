@@ -168,4 +168,95 @@ describe("Sandbox", () => {
     await fromFrame({ id: 1, method: "commands.register", params: { id: "go" } });
     expect(sb.hasCommand("go")).toBe(true);
   });
+
+  it("kills an extension that does not answer the heartbeat, and its caller gets an error", async () => {
+    const { sb, onDead, frame, fromFrame } = await boot();
+    await fromFrame({ event: "ready" });
+    const rejected = sb.run("evade").then(
+      () => null,
+      (e: Error) => e,
+    );
+    await fromFrame({ event: "unresponsive" });
+    expect((await rejected)?.message).toMatch(/stopped responding/);
+    expect(onDead).toHaveBeenCalledExactlyOnceWith("unresponsive");
+    expect(sb.running).toBe(false);
+    expect(frame!.isConnected).toBe(false);
+  });
+
+  it("fails the start when the worker is unresponsive before it is ready", async () => {
+    const { started_, onDead, fromFrame } = await boot();
+    await fromFrame({ event: "unresponsive" });
+    expect((await started_)?.message).toMatch(/stopped responding/);
+    expect(onDead).toHaveBeenCalledWith("unresponsive");
+  });
+
+  describe("floods", () => {
+    const burst = async (fromFrame: (d: unknown) => Promise<void>, make: (i: number) => unknown, n = LIMITS.callsPerSecond + 5) => {
+      for (let i = 0; i < n; i++) await fromFrame(make(i));
+    };
+
+    it("stops a flood of events", async () => {
+      const { sb, onDead, fromFrame } = await boot();
+      await fromFrame({ event: "ready" });
+      await burst(fromFrame, () => ({ event: "error", message: "x" }));
+      expect(onDead).toHaveBeenCalledExactlyOnceWith("rate-limit");
+      expect(sb.running).toBe(false);
+    });
+
+    it("stops a flood of replies, also to commands nobody asked for", async () => {
+      const { sb, onDead, fromFrame } = await boot();
+      await fromFrame({ event: "ready" });
+      await burst(fromFrame, (i) => ({ id: i + 1000, result: null }));
+      expect(onDead).toHaveBeenCalledExactlyOnceWith("rate-limit");
+      expect(sb.running).toBe(false);
+    });
+
+    it("stops a flood of junk, which still counts", async () => {
+      const { sb, onDead, fromFrame } = await boot();
+      await fromFrame({ event: "ready" });
+      await burst(fromFrame, (i) => ({ nonsense: i }));
+      expect(onDead).toHaveBeenCalledExactlyOnceWith("rate-limit");
+      expect(sb.running).toBe(false);
+    });
+
+    it("stops a flood of calls", async () => {
+      const { sb, onDead, fromFrame } = await boot(["editor.read"]);
+      await fromFrame({ event: "ready" });
+      await burst(fromFrame, (i) => ({ id: i + 1, method: "editor.getText", params: {} }));
+      expect(onDead).toHaveBeenCalledExactlyOnceWith("rate-limit");
+      expect(sb.running).toBe(false);
+    });
+
+    it("leaves a busy but legitimate extension alone", async () => {
+      const { sb, onDead, fromFrame } = await boot(["editor.read"]);
+      await fromFrame({ event: "ready" });
+      for (let i = 0; i < 100; i++) await fromFrame({ id: i + 1, method: "editor.getText", params: {} });
+      await vi.advanceTimersByTimeAsync(1100);
+      for (let i = 0; i < 100; i++) await fromFrame({ id: i + 1, method: "editor.getText", params: {} });
+      expect(onDead).not.toHaveBeenCalled();
+      expect(sb.running).toBe(true);
+    });
+  });
+
+  it("ignores malformed events and replies instead of acting on them", async () => {
+    const { sb, onDead, fromFrame } = await boot();
+    await fromFrame({ event: "ready" });
+    const outcome = sb.run("go").then(
+      () => null,
+      (e: Error) => e,
+    );
+    for (const bad of [
+      { event: "beat" },
+      { event: "timeout" },
+      { event: "timeout", id: "1" },
+      { id: 1, result: { not: "null" } },
+      { id: 1, error: { not: "text" } },
+      { id: "1", result: null },
+      [1, 2, 3],
+    ]) await fromFrame(bad);
+    expect(onDead).not.toHaveBeenCalled();
+    expect(sb.running).toBe(true);
+    await fromFrame({ id: 1, error: "e".repeat(5000) });
+    expect((await outcome)?.message).toMatch(/^e{300}$/);
+  });
 });

