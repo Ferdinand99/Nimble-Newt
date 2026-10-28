@@ -58,6 +58,23 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  # The end-to-end check of the extension sandbox (NN-02): a hostile extension runs in the real sandbox document in
+  # Chromium and WebKit (the engines behind WebView2 and WKWebView) and must not reach a listener on 127.0.0.1. Only the
+  # two browsers are installed, so the job stays short. Locally: npm run test:sandbox (see e2e/README.md).
+  sandbox:
+    name: Sandbox (Playwright, Chromium and WebKit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:sandbox
+
   build:
     name: Build (${{ matrix.name }})
     needs: [rust, frontend]

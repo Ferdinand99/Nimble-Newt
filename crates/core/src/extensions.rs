@@ -1377,6 +1377,19 @@ mod tests {
         assert!(validate_manifest(&manifest_json().to_string(), "nope").is_err());
     }
 
+    #[test]
+    fn the_nn02_check_example_is_a_valid_extension() {
+        // examples/nn02-check is installed by hand to check the sandbox; keep it installable.
+        let json = include_str!("../../../examples/nn02-check/manifest.json");
+        let m = validate_manifest(json, APP).unwrap();
+        assert_eq!(m.id, "dev.nimblenewt.nn02check");
+        assert_eq!(m.permissions, vec![Permission::Ui]);
+        assert_eq!(m.contributes.commands.len(), 1);
+        let script = include_str!("../../../examples/nn02-check/main.js");
+        assert!(script.len() < 64 * 1024);
+        assert!(script.contains("nimble.commands.register(\"check\""));
+    }
+
     // -- consent ------------------------------------------------------------------------------
 
     #[test]

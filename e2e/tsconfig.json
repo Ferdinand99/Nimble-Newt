@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "types": ["node", "vite/client"], "allowImportingTsExtensions": false },
+  "include": ["./*.ts", "../playwright.config.ts", "../src/ext/*.ts"],
+  "exclude": ["../src/**/*.test.ts"]
+}

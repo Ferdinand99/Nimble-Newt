@@ -1,8 +1,8 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { api } from "../lib/api";
 import { h } from "../lib/dom";
-import { IFRAME_BOOTSTRAP, WORKER_BOOTSTRAP } from "./bootstrap";
-import { buildSrcdoc, checkRequest, LIMITS, RateLimiter, type Permission } from "./protocol";
+import { sandboxDocument } from "./document";
+import { checkRequest, LIMITS, RateLimiter, type Permission } from "./protocol";
 import { TimerGroup } from "./timers";
 
 export type ApiHandler = (method: string, params: Record<string, unknown>) => Promise<unknown>;
@@ -62,7 +62,7 @@ export class Sandbox {
       // scripts would never run. sandbox without allow-same-origin: opaque origin, no access to the app. The
       // extension's script does not run in the document but in a worker the document starts.
       api
-        .sandboxStage(buildSrcdoc(IFRAME_BOOTSTRAP, WORKER_BOOTSTRAP + "\n" + this.code))
+        .sandboxStage(sandboxDocument(this.code))
         .then((id) => {
           if (!this.ready) return void api.sandboxRelease(id).catch(() => {});
           this.docId = id;
