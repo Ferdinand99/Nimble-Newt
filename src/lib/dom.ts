@@ -1,10 +1,22 @@
 type Child = Node | string | null | undefined | false;
 type Props = Record<string, unknown> & { class?: string; dataset?: Record<string, string> };
 
+/** Properties that parse a string as markup: `h` never sets them. Build child nodes instead. */
+const MARKUP_PROPS = new Set(["innerhtml", "outerhtml", "srcdoc"]);
+
+/**
+ * Builds an element. Props become properties or attributes, `on*` functions become listeners, and
+ * children are appended as nodes or text, so a string is never parsed as HTML. `innerHTML`,
+ * `outerHTML`, `srcdoc` and `on*` handlers given as strings are refused (they would run text as
+ * markup or script): `h` throws instead of setting them.
+ */
 export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = {}, ...children: Child[]): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
     if (v === undefined || v === null || v === false) continue;
+    const lower = k.toLowerCase();
+    if (MARKUP_PROPS.has(lower)) throw new Error(`h(): "${k}" would parse text as HTML; append nodes instead`);
+    if (lower.startsWith("on") && typeof v !== "function") throw new Error(`h(): "${k}" must be a function, not text that would run as script`);
     if (k === "class") el.className = String(v);
     else if (k === "dataset") Object.assign(el.dataset, v);
     else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2).toLowerCase(), v as EventListener);

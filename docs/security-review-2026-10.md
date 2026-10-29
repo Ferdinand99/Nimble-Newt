@@ -32,7 +32,7 @@ sizes), large-file handling, linear-time regex, and update signature checking ov
 | NN-04 | Low | Folder search was quadratic on long lines | Fixed in #27 |
 | NN-05 | Low | Extension timeouts depend on host timers; storage rate; `ui.*` calls outside commands | Partly fixed: the timeout now terminates the worker, also for a script that tries to hide from it (ships in 0.3.0). Open: the storage rate and `ui.*` calls outside commands |
 | NN-06 | Low | Update version not covered by the signature; actions pinned by tag; signing key exposed to the build action | Partly fixed in #27 (actions pinned to commit SHAs). Open: the rest |
-| NN-07 | Info | `extract_zip` panic, install check, FIFOs, plaintext session buffers, `h()` helper trap, test hooks in release builds, optional signing | Partly fixed in #27 (the panic and non-regular files). The other notes are open |
+| NN-07 | Info | `extract_zip` panic, install check, FIFOs, plaintext session buffers, `h()` helper trap, test hooks in release builds, optional signing | Partly fixed in #27 (the panic and non-regular files) and #32 (the `h()` helper refuses `innerHTML`, `outerHTML`, `srcdoc` and text `on*` handlers). The other notes are open |
 
 ### What was changed (#27)
 
@@ -91,8 +91,9 @@ sizes), large-file handling, linear-time regex, and update signature checking ov
   `release` with required reviewers and move the key secrets there; it is not applied because adding the environment
   without moving the secrets would break signing.
 - **NN-07, remainder, open.** The extension install check compares the manifest only, session buffers are plaintext on
-  disk, one helper in the UI code is easy to misuse, some test hooks are present in release builds, and code
-  signing is optional (see [signing](signing.md)). Informational.
+  disk, some test hooks are present in release builds (`NIMBLE_EXT_SELFTEST` and `NIMBLE_STARTUP_REPORT`, which CI
+  uses to check release builds), and code signing is optional (see [signing](signing.md)). Informational. The UI
+  helper `h()` is fixed in #32.
 
 ## Not covered
 
