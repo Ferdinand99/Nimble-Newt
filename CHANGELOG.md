@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/Ferdinand99/Nimble-Newt/compare/v0.3.0...v0.3.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* security review backlog ([#32](https://github.com/Ferdinand99/Nimble-Newt/issues/32)) ([0a629d8](https://github.com/Ferdinand99/Nimble-Newt/commit/0a629d8d0c15fabedc30bd0b4b1338fa082eeb9c))
+
 ## [0.3.0](https://github.com/Ferdinand99/Nimble-Newt/compare/v0.2.2...v0.3.0) (2026-10-28)
 
 
