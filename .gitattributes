@@ -1,0 +1,7 @@
+* text=auto
+*.sh text eol=lf
+*.mjs text eol=lf
+THIRD-PARTY-NOTICES text eol=lf
+legal/* text eol=lf
+notices-extra.json text eol=lf
+about.toml text eol=lf
