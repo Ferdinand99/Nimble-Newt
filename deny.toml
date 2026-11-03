@@ -9,6 +9,7 @@ ignore = [
     { id = "RUSTSEC-2026-0367", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
     { id = "RUSTSEC-2026-0368", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
     { id = "RUSTSEC-2026-0369", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
+    { id = "RUSTSEC-2026-0429", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
     # Unmaintained crates that come in through Tauri's Linux stack (gtk3/glib
     # macros, zbus). Build-time macros or D-Bus plumbing; no fix until Tauri moves.
     { id = "RUSTSEC-2024-0370", reason = "proc-macro-error via gtk3/glib macros (Tauri, Linux), build time only" },
