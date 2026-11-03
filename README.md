@@ -179,6 +179,10 @@ Not done yet:
 
 The October 2026 security review (what was found, fixed and left open) is in [docs/security-review-2026-10.md](docs/security-review-2026-10.md).
 
+## Support
+
+Hedgerow is built in spare time and is free to use. If you find it useful, you can support it through [GitHub Sponsors](https://github.com/sponsors/Ferdinand99) or [Ko-fi](https://ko-fi.com/ferdinand99). Thank you.
+
 ## License
 
 [GNU AGPL-3.0-only](LICENSE). The Inter typeface is included under the SIL Open Font License (`public/fonts/Inter-LICENSE.txt`); the design system and icons originate in [Vigilant Vole](https://github.com/Ferdinand99/Vigilant-Vole); see the applicable LICENSE files and release history for license terms.
