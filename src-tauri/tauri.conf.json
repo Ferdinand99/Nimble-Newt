@@ -46,8 +46,20 @@
     "category": "DeveloperTool",
     "shortDescription": "A fast, modern text editor",
     "licenseFile": "../LICENSE",
+    "resources": {
+      "../LICENSE": "LICENSE",
+      "../THIRD-PARTY-NOTICES": "THIRD-PARTY-NOTICES"
+    },
     "macOS": {
       "minimumSystemVersion": "11.0"
+    },
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/doc/nimble-newt/copyright": "../LICENSE",
+          "/usr/share/doc/nimble-newt/THIRD-PARTY-NOTICES": "../THIRD-PARTY-NOTICES"
+        }
+      }
     },
     "windows": {
       "wix": {

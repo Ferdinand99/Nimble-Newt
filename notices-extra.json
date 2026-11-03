@@ -1,0 +1,136 @@
+{
+  "comment": "Read by scripts/third-party-notices.mjs. 'copyright': crates for which no licence file with a real copyright notice exists in the crate or its repository. Their text is the licence template of cargo-about with the placeholder replaced by 'holder'. basis 'authors': holder is the authors field of the crate (checked against cargo metadata at the exact version). basis 'repository': holder named from the upstream repository, see 'source'. An entry is used only for the exact name and version, and an entry that is no longer needed is an error. 'webview2': Microsoft's WebView2 loader, linked statically on Windows from the files the webview2-com-sys crate carries; the licence text is the LICENSE.txt of that exact NuGet package version, and the hashes pin the files it applies to.",
+  "product": "Nimble Newt",
+  "intro": [
+    [
+      "The Rust crates are those that the app is built from, for Windows, macOS and Linux. A crate that",
+      "only runs while the program is built (a build script) is not listed. A crate that is only used",
+      "at build time through a procedural macro may be listed."
+    ],
+    [
+      "The npm packages are the production dependencies of the front end, which the app bundles."
+    ]
+  ],
+  "fontLicenseFile": "public/fonts/Inter-LICENSE.txt",
+  "copyright": [
+    {
+      "name": "block2",
+      "version": "0.6.2",
+      "license": "MIT",
+      "basis": "authors",
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
+      ],
+      "holder": "Mads Marquart <mads@marquart.dk>"
+    },
+    {
+      "name": "dispatch2",
+      "version": "0.3.1",
+      "license": "MIT",
+      "basis": "authors",
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>",
+        "Mary <mary@mary.zone>"
+      ],
+      "holder": "Mads Marquart <mads@marquart.dk>, Mary <mary@mary.zone>"
+    },
+    {
+      "name": "objc2",
+      "version": "0.6.5",
+      "license": "MIT",
+      "basis": "authors",
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
+      ],
+      "holder": "Mads Marquart <mads@marquart.dk>"
+    },
+    {
+      "name": "objc2-app-kit",
+      "version": "0.3.2",
+      "license": "MIT",
+      "basis": "repository",
+      "source": "https://github.com/madsmtm/objc2: the crate lists no authors and neither the crate nor the repository at the published commit has a copyright notice (LICENSE.md only names the licences). The other crates of the same repository name Mads Marquart as author.",
+      "holder": "Mads Marquart and the contributors of https://github.com/madsmtm/objc2"
+    },
+    {
+      "name": "objc2-core-foundation",
+      "version": "0.3.2",
+      "license": "MIT",
+      "basis": "repository",
+      "source": "https://github.com/madsmtm/objc2: the crate lists no authors and neither the crate nor the repository at the published commit has a copyright notice (LICENSE.md only names the licences). The other crates of the same repository name Mads Marquart as author.",
+      "holder": "Mads Marquart and the contributors of https://github.com/madsmtm/objc2"
+    },
+    {
+      "name": "objc2-core-graphics",
+      "version": "0.3.2",
+      "license": "MIT",
+      "basis": "repository",
+      "source": "https://github.com/madsmtm/objc2: the crate lists no authors and neither the crate nor the repository at the published commit has a copyright notice (LICENSE.md only names the licences). The other crates of the same repository name Mads Marquart as author.",
+      "holder": "Mads Marquart and the contributors of https://github.com/madsmtm/objc2"
+    },
+    {
+      "name": "objc2-encode",
+      "version": "4.1.0",
+      "license": "MIT",
+      "basis": "authors",
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
+      ],
+      "holder": "Mads Marquart <mads@marquart.dk>"
+    },
+    {
+      "name": "objc2-exception-helper",
+      "version": "0.1.1",
+      "license": "MIT",
+      "basis": "authors",
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
+      ],
+      "holder": "Mads Marquart <mads@marquart.dk>"
+    },
+    {
+      "name": "objc2-foundation",
+      "version": "0.3.2",
+      "license": "MIT",
+      "basis": "repository",
+      "source": "https://github.com/madsmtm/objc2: the crate lists no authors and neither the crate nor the repository at the published commit has a copyright notice (LICENSE.md only names the licences). The other crates of the same repository name Mads Marquart as author.",
+      "holder": "Mads Marquart and the contributors of https://github.com/madsmtm/objc2"
+    },
+    {
+      "name": "objc2-osa-kit",
+      "version": "0.3.2",
+      "license": "MIT",
+      "basis": "repository",
+      "source": "https://github.com/madsmtm/objc2: the crate lists no authors and neither the crate nor the repository at the published commit has a copyright notice (LICENSE.md only names the licences). The other crates of the same repository name Mads Marquart as author.",
+      "holder": "Mads Marquart and the contributors of https://github.com/madsmtm/objc2"
+    },
+    {
+      "name": "objc2-quartz-core",
+      "version": "0.3.2",
+      "license": "MIT",
+      "basis": "repository",
+      "source": "https://github.com/madsmtm/objc2: the crate lists no authors and neither the crate nor the repository at the published commit has a copyright notice (LICENSE.md only names the licences). The other crates of the same repository name Mads Marquart as author.",
+      "holder": "Mads Marquart and the contributors of https://github.com/madsmtm/objc2"
+    },
+    {
+      "name": "objc2-web-kit",
+      "version": "0.3.2",
+      "license": "MIT",
+      "basis": "repository",
+      "source": "https://github.com/madsmtm/objc2: the crate lists no authors and neither the crate nor the repository at the published commit has a copyright notice (LICENSE.md only names the licences). The other crates of the same repository name Mads Marquart as author.",
+      "holder": "Mads Marquart and the contributors of https://github.com/madsmtm/objc2"
+    }
+  ],
+  "webview2": {
+    "package": "Microsoft.Web.WebView2",
+    "version": "1.0.3800.47",
+    "licenseFile": "legal/WebView2-LICENSE.txt",
+    "licenseSha256": "0af8f1b807512aae39c2ac1aa4d0cae65cabecb6fd554b8439a5162a0d6eca55",
+    "vendoredBy": "webview2-com-sys",
+    "vendoredFiles": {
+      "arm64/WebView2LoaderStatic.lib": "4a1ca4b518337c508aa0d778b220c6e59558fce21f4fd0d79a6ea944dd9d5208",
+      "x64/WebView2LoaderStatic.lib": "89c6b872783b8f6c3cedbff618adb42082d455c615453ae10cfc753f1e8f25d8",
+      "x86/WebView2LoaderStatic.lib": "0513f7e61304321f2d91e1851475be07e091042aa3640597e660608f72521e6c"
+    }
+  }
+}

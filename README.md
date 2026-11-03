@@ -182,3 +182,5 @@ The October 2026 security review (what was found, fixed and left open) is in [do
 ## License
 
 [GNU AGPL-3.0-only](LICENSE). The Inter typeface is included under the SIL Open Font License (`public/fonts/Inter-LICENSE.txt`); the design system and icons originate in [Vigilant Vole](https://github.com/Ferdinand99/Vigilant-Vole); see the applicable LICENSE files and release history for license terms.
+
+The licence texts of the Rust crates and npm packages inside the app are in [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES), which every installer ships next to the AGPL text (in the `.deb` also as `/usr/share/doc/nimble-newt/THIRD-PARTY-NOTICES`). The file is made by `scripts/notices.sh` (cargo-about, pinned) and CI fails when it is out of date or when a dependency has a licence that is not on the allowlist in `about.toml`. After changing a dependency, run `npm ci && scripts/notices.sh` and commit the result.

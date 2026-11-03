@@ -58,6 +58,41 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  # THIRD-PARTY-NOTICES lists the licence texts of the Rust crates and npm packages in the app.
+  # It is made from the dependencies (scripts/notices.sh), so a changed dependency makes it stale:
+  # this job fails then. It also fails when a dependency has a licence that is not on the
+  # allowlist in about.toml, or no licence text at all.
+  notices:
+    name: Third-party notices (up to date, licences allowed)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Pinned version and pinned checksum. Keep the version equal to want_version in
+      # scripts/notices.sh.
+      - name: Install cargo-about
+        env:
+          CARGO_ABOUT_VERSION: "0.9.3"
+          CARGO_ABOUT_SHA256: "3ad1e94ea1e63d69d1961f4fb15ccbbe9575d906111f96d2cb4dce6df48f71b4"
+        run: |
+          name="cargo-about-${CARGO_ABOUT_VERSION}-x86_64-unknown-linux-musl"
+          curl -fsSL -o "$RUNNER_TEMP/cargo-about.tar.gz" \
+            "https://github.com/EmbarkStudios/cargo-about/releases/download/${CARGO_ABOUT_VERSION}/${name}.tar.gz"
+          echo "${CARGO_ABOUT_SHA256}  $RUNNER_TEMP/cargo-about.tar.gz" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$RUNNER_TEMP/cargo-about.tar.gz" -C "$HOME/.local/bin" --strip-components=1 "${name}/cargo-about"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # --fail is what makes an unreadable licence stop the check; this test proves it.
+      - name: cargo-about stops on a crate with an unreadable licence
+        run: scripts/test-notices-fail.sh
+      - name: THIRD-PARTY-NOTICES is up to date
+        run: scripts/notices.sh --check
+
   # The end-to-end check of the extension sandbox (NN-02): a hostile extension runs in the real sandbox document in
   # Chromium and WebKit (the engines behind WebView2 and WKWebView) and must not reach a listener on 127.0.0.1. Only the
   # two browsers are installed, so the job stays short. Locally: npm run test:sandbox (see e2e/README.md).
@@ -130,6 +165,14 @@ jobs:
               -exec cp {} out/ \;
           done
           ls -la out
+
+      # Look inside the installers, not at the build configuration: the installers are unpacked the
+      # way a user's system would, then THIRD-PARTY-NOTICES and the AGPL text must be in each one
+      # (msi and nsis; dmg; deb) and be the files of the repository.
+      - name: Unpack the installers
+        run: scripts/unpack-installer.sh ${{ matrix.name }} out "$RUNNER_TEMP/unpacked"
+      - name: The installers carry the licence texts
+        run: node scripts/check-installer-legal.mjs ${{ matrix.name }} "$RUNNER_TEMP/unpacked"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:

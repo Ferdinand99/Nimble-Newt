@@ -1,4 +1,5 @@
-# cargo-deny configuration, used by the Audit workflow (advisories only).
+# cargo-deny configuration, used by the Audit workflow (advisories). [licenses].allow mirrors the
+# allowlist in about.toml (a unit test keeps them equal); about.toml is what CI enforces.
 [advisories]
 ignore = [
     # zip < 9: ZipArchive::extract / ZipStreamReader::extract mishandle symlinks
@@ -8,6 +9,7 @@ ignore = [
     { id = "RUSTSEC-2026-0367", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
     { id = "RUSTSEC-2026-0368", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
     { id = "RUSTSEC-2026-0369", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
+    { id = "RUSTSEC-2026-0429", reason = "own unpacking refuses symlinks/special modes; updater input is signed" },
     # Unmaintained crates that come in through Tauri's Linux stack (gtk3/glib
     # macros, zbus). Build-time macros or D-Bus plumbing; no fix until Tauri moves.
     { id = "RUSTSEC-2024-0370", reason = "proc-macro-error via gtk3/glib macros (Tauri, Linux), build time only" },
@@ -15,3 +17,28 @@ ignore = [
     { id = "RUSTSEC-2026-0371", reason = "zbus stack via Tauri on Linux; unmaintained, no known vulnerability" },
     { id = "RUSTSEC-2026-0372", reason = "zbus stack via Tauri on Linux; unmaintained, no known vulnerability" },
 ]
+
+[licenses]
+# Licenses of the crates we depend on. Strong copyleft is not on this list. The project's own
+# crates (AGPL-3.0-only, publish = false) are private and skipped.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+    "Unlicense",
+    "0BSD",
+    "BSL-1.0",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+
+[licenses.private]
+ignore = true
