@@ -588,7 +588,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Used by:
   ring 0.17.14 (https://github.com/briansmith/ring)
-  similar 2.7.0 (https://github.com/mitsuhiko/similar)
+  similar 3.2.1 (https://github.com/mitsuhiko/similar)
 
 Apache License
                         Version 2.0, January 2004
