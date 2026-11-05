@@ -20,6 +20,11 @@ updates:
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # typescript-eslint 8 declares a TypeScript peer range of <6.1, so a 7.x bump fails npm ci.
+      # Revisit when typescript-eslint lists TypeScript 7 as a supported peer.
+      - dependency-name: typescript
+        versions: ["7.x"]
     commit-message:
       prefix: "chore(deps)"
   - package-ecosystem: github-actions
