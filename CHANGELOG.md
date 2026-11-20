@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/Ferdinand99/Nimble-Newt/compare/v0.3.1...v0.4.0) (2026-11-20)
+
+
+### Features
+
+* **editor:** add Edit, Split and Read views for Markdown files ([#51](https://github.com/Ferdinand99/Nimble-Newt/issues/51)) ([528da33](https://github.com/Ferdinand99/Nimble-Newt/commit/528da3300a0b1eda9e3d18ded0ebe7c6815c0e44))
+
 ## [0.3.1](https://github.com/Ferdinand99/Nimble-Newt/compare/v0.3.0...v0.3.1) (2026-11-05)
 
 
