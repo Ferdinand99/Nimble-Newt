@@ -7,8 +7,8 @@
 // raw HTML cannot borrow the app's styles to cover the window.
 //
 // Links and images are marked for the view (data-md-*) instead of being left to the browser:
-// - a link gets `data-md-link` = anchor | external | markdown | blocked and `data-md-href`; blocked
-//   links lose their `href`;
+// - a link gets `data-md-link` = anchor | external | markdown | blocked, and `data-md-href` (anchor,
+//   external) or `data-md-path` / `data-md-fragment` (markdown); blocked links lose their `href`;
 // - an image keeps its `src` only for `data:image/…`; a remote image moves its URL to
 //   `data-md-remote` and a relative one its path to `data-md-local`, both without `src`, so nothing
 //   loads until the view asks the backend for it. Anything else loses its `src`.
@@ -41,7 +41,7 @@ const FORBID_ATTR = [
 ];
 
 /** The class names the renderer writes; nothing else survives. */
-const CLASS_OK = /^(language-[\w+#.-]{1,40}|task-list-item|contains-task-list|task-list-item-checkbox)$/;
+const CLASS_OK = /^(language-[\w+#.-]{1,40}|task-list-item|contains-task-list|task-list-item-checkbox|md-split-table|md-split-list)$/;
 
 const CONFIG: Config & { RETURN_DOM_FRAGMENT: true } = {
   USE_PROFILES: { html: true },
@@ -79,7 +79,11 @@ function setUp(): Purifier {
       if (target.kind === "blocked") node.removeAttribute("href");
       else if (target.kind === "anchor") node.setAttribute("data-md-href", target.id);
       else if (target.kind === "external") node.setAttribute("data-md-href", target.url);
-      else node.setAttribute("data-md-href", target.fragment ? `${target.path}#${target.fragment}` : target.path);
+      else {
+        // Path and fragment apart: a "#" can be part of a file name.
+        node.setAttribute("data-md-path", target.path);
+        if (target.fragment) node.setAttribute("data-md-fragment", target.fragment);
+      }
     } else if (tag === "IMG") {
       const source = classifyImage(node.getAttribute("src"));
       if (source.kind === "data") return;

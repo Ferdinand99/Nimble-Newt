@@ -582,5 +582,8 @@
  "markdown.imageFailed": "image could not be loaded: {error}",
  "markdown.linkBlocked": "This link is not opened (only web, mail and Markdown links are).",
  "markdown.linkNeedsSave": "Save the file first to follow links to other files.",
- "markdown.renderFailed": "The document could not be shown: {error}"
+ "markdown.renderFailed": "The document could not be shown: {error}",
+ "markdown.consentTitle": "Show remote images?",
+ "markdown.consentMessage": "“{name}” loads {n} images from the internet. The servers that host them will see your IP address and that you opened this document. Nimble Newt asks again after a restart.",
+ "markdown.saveFirst": "Save the file first: web links and remote images work in saved files only."
 }

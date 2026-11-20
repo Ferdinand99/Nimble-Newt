@@ -54,12 +54,19 @@ const README = [
 /** About 1 MB of typical Markdown: headings, lists, links, code. */
 const BIG_BLOCK = "## Section\n\nSome *text* with `code`, a [link](https://example.com) and **bold** words to fill the line.\n\n- one\n- two\n\n```js\nconst x = 1;\n```\n\n";
 const BIG = `# Big\n\n${BIG_BLOCK.repeat(Math.ceil(1_000_000 / BIG_BLOCK.length))}`;
+/** About 1 MB in one single list, and in one single table: the worst case for re-rendering. */
+const LIST_ITEMS = 18_000;
+const BIG_LIST = Array.from({ length: LIST_ITEMS }, (_, i) => `- item ${i} with a [link](https://example.com/${i}) and *some* words`).join("\n") + "\n";
+const TABLE_ROWS = 14_000;
+const BIG_TABLE = `| name | value | note |\n|---|---:|---|\n${Array.from({ length: TABLE_ROWS }, (_, i) => `| row ${i} with some text in the first cell | ${i * 7} | another cell with more words |`).join("\n")}\n`;
 
 const FILES: Record<string, string> = {
   "/work/docs/readme.md": README,
   "/work/docs/other.md": "# Other file\n\nJust text.\n",
   "/work/docs/notes.txt": "plain notes\n",
   "/work/docs/big.md": BIG,
+  "/work/docs/biglist.md": BIG_LIST,
+  "/work/docs/bigtable.md": BIG_TABLE,
 };
 
 /** Runs in the page before the app: a stand-in for Tauri's IPC. */
@@ -74,7 +81,7 @@ function tauriStub({ files, png }: { files: Record<string, string>; png: string 
     selectionAnchor: 0, selectionHead: 0, scrollTop: 0, scrollLeft: 0, savedMtimeMs: 1, bookmarks: [], buffer: null,
   });
   const handlers: Record<string, (a: Record<string, unknown>) => unknown> = {
-    session_load: () => ({ tabs: [tab("readme", "/work/docs/readme.md"), tab("other", "/work/docs/other.md"), tab("notes", "/work/docs/notes.txt"), tab("big", "/work/docs/big.md")], active: "readme" }),
+    session_load: () => ({ tabs: [tab("readme", "/work/docs/readme.md"), tab("other", "/work/docs/other.md"), tab("notes", "/work/docs/notes.txt"), tab("big", "/work/docs/big.md"), tab("biglist", "/work/docs/biglist.md"), tab("bigtable", "/work/docs/bigtable.md")], active: "readme" }),
     take_pending_paths: () => [],
     list_encodings: () => [{ label: "UTF-8", group: "Unicode" }],
     file_meta: (a) => ({ size: files[a.path as string]?.length ?? 0, large: false }),
@@ -90,13 +97,15 @@ function tauriStub({ files, png }: { files: Record<string, string>; png: string 
       if (a.src === "img/ok.png" && a.docPath === "/work/docs/readme.md") return png;
       throw "only images in the document's folder are shown";
     },
+    md_allow_remote: () => true,
     md_remote_image: () => png,
     "plugin:event|listen": () => next++,
   };
   w.__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: "main" }, currentWebview: { windowLabel: "main", label: "main" } },
     invoke: (cmd: string, args: Record<string, unknown> = {}) => {
-      calls.push({ cmd, args });
+      // Buffers of unsaved tabs are not kept: at 1 MB each they would fill the heap and cause GC pauses.
+      calls.push({ cmd, args: cmd === "buffer_write" ? {} : args });
       const h = handlers[cmd];
       try {
         return Promise.resolve(h ? h(args) : null);
@@ -262,7 +271,7 @@ test("each tab remembers its own view, and the session stores it", async ({ page
       const last = saves.at(-1)?.meta as { tabs: { id: string; mdView?: string | null }[] } | undefined;
       return last?.tabs.map((x) => [x.id, x.mdView ?? null]);
     })
-    .toEqual([["readme", "read"], ["other", "split"], ["notes", null], ["big", null]]);
+    .toEqual([["readme", "read"], ["other", "split"], ["notes", null], ["big", null], ["biglist", null], ["bigtable", null]]);
 });
 
 test("safe by default: no scripts, no remote images until allowed, links never navigate", async ({ page, app }) => {
@@ -291,14 +300,17 @@ test("safe by default: no scripts, no remote images until allowed, links never n
   await expect(cat).not.toHaveAttribute("src", /.*/);
   await expect(page.locator(".md-bar")).toBeVisible();
   expect(await calls(page, "md_remote_image")).toEqual([]);
+  expect(await calls(page, "md_allow_remote")).toEqual([]);
   await page.locator(".md-bar button").click();
+  // The backend asks the user (its own dialog, stubbed here) and only then serves the images.
   await expect(cat).toHaveAttribute("src", /^data:image\/png;base64,/);
-  expect(await calls(page, "md_remote_image")).toEqual([{ url: "https://images.example.com/cat.png" }]);
+  expect(await calls(page, "md_allow_remote")).toEqual([{ docPath: "/work/docs/readme.md", count: 1 }]);
+  expect(await calls(page, "md_remote_image")).toEqual([{ docPath: "/work/docs/readme.md", url: "https://images.example.com/cat.png" }]);
   await expect(page.locator(".md-bar")).toBeHidden();
 
   // Links: the web link goes to the system browser, javascript: does nothing, a .md link opens a tab.
   await b.locator("a", { hasText: "web link" }).click();
-  await expect.poll(() => calls(page, "open_external")).toEqual([{ url: "https://example.com/page" }]);
+  await expect.poll(() => calls(page, "open_external")).toEqual([{ docPath: "/work/docs/readme.md", url: "https://example.com/page" }]);
   await expect(b.locator("a", { hasText: "bad one" })).toHaveCount(0);
   await b.locator("a", { hasText: "raw" }).click();
   expect(await page.evaluate(() => (window as unknown as { __pwned?: number }).__pwned)).toBeUndefined();
@@ -310,38 +322,61 @@ test("safe by default: no scripts, no remote images until allowed, links never n
   expect(outside).toEqual([]);
 });
 
-test("a 1 MB document stays responsive in Split", async ({ page, app }) => {
-  void app;
-  await openTab(page, "/work/docs/big.md");
-  await expect(page.locator(".cm-content")).toContainText("Big");
-  await seg(page, "Split").click();
-  await expect(body(page).locator("h1")).toHaveText("Big", { timeout: 30_000 });
-  // Wait until the whole document is in (the first render fills the view in steps).
-  const sections = BIG.split("## Section").length - 1;
-  await expect.poll(() => body(page).locator("h2").count(), { timeout: 60_000 }).toBe(sections);
+/**
+ * Longest main-thread pause allowed while a 1 MB document is re-rendered after an edit. Generous for
+ * slow CI machines without a GPU; before the view rendered in chunks with content-visibility, this
+ * was several seconds.
+ */
+const RENDER_PAUSE_MS = 300;
 
-  // While typing, the page must keep answering: measure the longest gap between timer ticks.
-  await page.evaluate(() => {
-    const w = window as unknown as { __gap: number };
-    let last = performance.now();
-    w.__gap = 0;
-    window.setInterval(() => {
-      const now = performance.now();
-      w.__gap = Math.max(w.__gap, now - last);
-      last = now;
-    }, 10);
+const bigCases = [
+  { name: "many sections", path: "/work/docs/big.md", done: "h2", count: BIG.split("## Section").length - 1, line: 0 },
+  { name: "one long list", path: "/work/docs/biglist.md", done: "li", count: LIST_ITEMS, line: 0 },
+  { name: "one long table", path: "/work/docs/bigtable.md", done: "tbody tr", count: TABLE_ROWS, line: 2 },
+];
+
+for (const c of bigCases) {
+  test(`a 1 MB document (${c.name}) stays responsive in Split`, async ({ page, app }) => {
+    void app;
+    await openTab(page, c.path);
+    await expect(page.locator(".cm-line").first()).toBeVisible();
+    await seg(page, "Split").click();
+    // Wait until the whole document is in (the first render fills the view in steps).
+    await expect.poll(() => body(page).locator(c.done).count(), { timeout: 90_000 }).toBe(c.count);
+    // Let the end of the first render (code colours, the first layout of what is in sight) settle.
+    await page.waitForTimeout(3000);
+
+    // Measure the longest gap between timer ticks: while typing, and until the view has caught up.
+    await page.evaluate(() => {
+      const w = window as unknown as { __gap: number };
+      let last = performance.now();
+      w.__gap = 0;
+      window.setInterval(() => {
+        const now = performance.now();
+        w.__gap = Math.max(w.__gap, now - last);
+        last = now;
+      }, 10);
+    });
+    // Type into an existing line, as when correcting a word in the middle of a document.
+    await page.locator(".cm-line").nth(c.line).click();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.type("typed ", { delay: 40 });
+    const typingGap = await page.evaluate(() => {
+      const w = window as unknown as { __gap: number };
+      const g = w.__gap;
+      w.__gap = 0; // from here on: the render after the edit
+      return g;
+    });
+    await expect.poll(() => body(page).evaluate((e) => (e.textContent ?? "").slice(0, 4000).includes("typed ")), { timeout: 30_000 }).toBe(true);
+    // Let the rest of the render (and the code colours) finish before reading the pause.
+    await page.waitForTimeout(1500);
+    const renderGap = await page.evaluate(() => (window as unknown as { __gap: number }).__gap);
+    console.log(`1 MB split view, ${c.name}: longest pause while typing ${Math.round(typingGap)} ms, during the render after it ${Math.round(renderGap)} ms`);
+    // Typing is the editor's own work (and shares the machine with the other browser in CI); the
+    // render is the view's, and must stay within budget.
+    expect(typingGap).toBeLessThan(1000);
+    expect(renderGap).toBeLessThan(RENDER_PAUSE_MS);
   });
-  await page.locator(".cm-line").first().click();
-  await page.keyboard.press("End");
-  await page.keyboard.press("Enter");
-  await page.keyboard.press("Enter");
-  await page.keyboard.type("Typing into a big file", { delay: 30 });
-  const typingGap = await page.evaluate(() => (window as unknown as { __gap: number }).__gap);
-  await expect(page.locator(".cm-content")).toContainText("Typing into a big file");
-  // The view catches up once typing stops.
-  await expect(body(page).locator("p").first()).toContainText("Typing into a big file", { timeout: 30_000 });
-  const total = await page.evaluate(() => (window as unknown as { __gap: number }).__gap);
-  console.log(`1 MB split view: longest pause while typing ${Math.round(typingGap)} ms, including the render ${Math.round(total)} ms`);
-  // No render runs while keys keep coming (the delay grows with the document), so typing never waits for it.
-  expect(typingGap).toBeLessThan(1000);
-});
+}

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   acceptedLicenses,
@@ -304,10 +305,25 @@ describe("npmEntries", () => {
     // argparse comes with markdown-it, but only its command-line tool uses it; the library the app imports does not.
     const extra = JSON.parse(readFileSync(new URL("../notices-extra.json", import.meta.url), "utf8"));
     expect(extra.npmNotShipped.map((n) => n.name)).toEqual(["argparse"]);
-    const pkg = JSON.parse(readFileSync(new URL("../node_modules/markdown-it/package.json", import.meta.url), "utf8"));
-    const entry = readFileSync(new URL(`../node_modules/markdown-it/${pkg.exports["."].import.default}`, import.meta.url), "utf8");
-    expect(entry).not.toMatch(/argparse/);
-    expect(readFileSync(new URL("../node_modules/markdown-it/bin/markdown-it.mjs", import.meta.url), "utf8")).toMatch(/argparse/);
+    const modules = fileURLToPath(new URL("../node_modules/", import.meta.url));
+    const pkg = JSON.parse(readFileSync(join(modules, "markdown-it/package.json"), "utf8"));
+    // Every script of markdown-it except its command-line tool, and of the packages it depends on.
+    const roots = [join(modules, "markdown-it"), ...Object.keys(pkg.dependencies).filter((d) => d !== "argparse").map((d) => join(modules, d))];
+    const scripts = [];
+    const walk = (dir) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) {
+          if (e.name !== "bin" && e.name !== "node_modules") walk(p);
+        } else if (/\.(c|m)?js$/.test(e.name)) scripts.push(p);
+      }
+    };
+    roots.forEach(walk);
+    expect(scripts.length).toBeGreaterThan(10);
+    const importsArgparse = /(from\s*|require\(\s*|import\(\s*)["']argparse["']/;
+    expect(scripts.filter((f) => importsArgparse.test(readFileSync(f, "utf8")))).toEqual([]);
+    // The check would see it: the command-line tool does import it.
+    expect(readFileSync(join(modules, "markdown-it/bin/markdown-it.mjs"), "utf8")).toMatch(importsArgparse);
   });
   it("fails for a package with no licence file", () => {
     const dir = folder({ "node_modules/a/package.json": "{}" });

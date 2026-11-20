@@ -582,5 +582,8 @@
  "markdown.imageFailed": "kuvaa ei voitu ladata: {error}",
  "markdown.linkBlocked": "Tätä linkkiä ei avata (vain verkko-, sähköposti- ja Markdown-linkit).",
  "markdown.linkNeedsSave": "Tallenna tiedosto ensin, jotta voit seurata linkkejä muihin tiedostoihin.",
- "markdown.renderFailed": "Asiakirjaa ei voitu näyttää: {error}"
+ "markdown.renderFailed": "Asiakirjaa ei voitu näyttää: {error}",
+ "markdown.consentTitle": "Näytetäänkö verkon kuvat?",
+ "markdown.consentMessage": "”{name}” lataa {n} kuvaa verkosta. Kuvia isännöivät palvelimet näkevät IP-osoitteesi ja sen, että avasit tämän asiakirjan. Nimble Newt kysyy uudelleen uudelleenkäynnistyksen jälkeen.",
+ "markdown.saveFirst": "Tallenna tiedosto ensin: verkkolinkit ja verkon kuvat toimivat vain tallennetuissa tiedostoissa."
 }

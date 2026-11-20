@@ -582,5 +582,8 @@
  "markdown.imageFailed": "Bild konnte nicht geladen werden: {error}",
  "markdown.linkBlocked": "Dieser Link wird nicht geöffnet (nur Web-, Mail- und Markdown-Links).",
  "markdown.linkNeedsSave": "Speichere die Datei zuerst, um Links zu anderen Dateien zu folgen.",
- "markdown.renderFailed": "Das Dokument konnte nicht angezeigt werden: {error}"
+ "markdown.renderFailed": "Das Dokument konnte nicht angezeigt werden: {error}",
+ "markdown.consentTitle": "Bilder aus dem Internet anzeigen?",
+ "markdown.consentMessage": "„{name}“ lädt {n} Bilder aus dem Internet. Die Server, auf denen sie liegen, sehen deine IP-Adresse und dass du das Dokument geöffnet hast. Nimble Newt fragt nach einem Neustart erneut.",
+ "markdown.saveFirst": "Speichere die Datei zuerst: Weblinks und Bilder aus dem Internet funktionieren nur in gespeicherten Dateien."
 }

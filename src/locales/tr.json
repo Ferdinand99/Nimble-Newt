@@ -582,5 +582,8 @@
  "markdown.imageFailed": "görsel yüklenemedi: {error}",
  "markdown.linkBlocked": "Bu bağlantı açılmaz (yalnızca web, e-posta ve Markdown bağlantıları açılır).",
  "markdown.linkNeedsSave": "Diğer dosyalara giden bağlantıları izlemek için önce dosyayı kaydedin.",
- "markdown.renderFailed": "Belge gösterilemedi: {error}"
+ "markdown.renderFailed": "Belge gösterilemedi: {error}",
+ "markdown.consentTitle": "Uzak görseller gösterilsin mi?",
+ "markdown.consentMessage": "“{name}” internetten {n} görsel yükler. Görselleri barındıran sunucular IP adresinizi ve bu belgeyi açtığınızı görür. Nimble Newt yeniden başlatmadan sonra tekrar sorar.",
+ "markdown.saveFirst": "Önce dosyayı kaydedin: web bağlantıları ve uzak görseller yalnızca kayıtlı dosyalarda çalışır."
 }

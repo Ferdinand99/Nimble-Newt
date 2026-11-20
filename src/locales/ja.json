@@ -582,5 +582,8 @@
  "markdown.imageFailed": "画像を読み込めませんでした: {error}",
  "markdown.linkBlocked": "このリンクは開きません(Web、メール、Markdown へのリンクのみ開きます)。",
  "markdown.linkNeedsSave": "ほかのファイルへのリンクをたどるには、先にファイルを保存してください。",
- "markdown.renderFailed": "文書を表示できませんでした: {error}"
+ "markdown.renderFailed": "文書を表示できませんでした: {error}",
+ "markdown.consentTitle": "リモート画像を表示しますか?",
+ "markdown.consentMessage": "「{name}」はインターネットから {n} 件の画像を読み込みます。画像をホストしているサーバーには、あなたの IP アドレスとこの文書を開いたことが伝わります。Nimble Newt は再起動後にもう一度確認します。",
+ "markdown.saveFirst": "先にファイルを保存してください。Web リンクとリモート画像は保存済みのファイルでのみ使えます。"
 }

@@ -582,5 +582,8 @@
  "markdown.imageFailed": "obrázek se nepodařilo načíst: {error}",
  "markdown.linkBlocked": "Tento odkaz se neotevře (jen webové, e-mailové a Markdown odkazy).",
  "markdown.linkNeedsSave": "Nejdřív soubor uložte, abyste mohli sledovat odkazy na jiné soubory.",
- "markdown.renderFailed": "Dokument nelze zobrazit: {error}"
+ "markdown.renderFailed": "Dokument nelze zobrazit: {error}",
+ "markdown.consentTitle": "Zobrazit obrázky z internetu?",
+ "markdown.consentMessage": "„{name}“ načítá {n} obrázků z internetu. Servery, na kterých jsou, uvidí vaši IP adresu a že jste tento dokument otevřeli. Nimble Newt se po restartu zeptá znovu.",
+ "markdown.saveFirst": "Nejdřív soubor uložte: webové odkazy a obrázky z internetu fungují jen v uložených souborech."
 }

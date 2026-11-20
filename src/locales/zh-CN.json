@@ -582,5 +582,8 @@
  "markdown.imageFailed": "无法加载图片：{error}",
  "markdown.linkBlocked": "此链接不会打开（仅打开网页、邮件和 Markdown 链接）。",
  "markdown.linkNeedsSave": "请先保存文件，才能跟随指向其他文件的链接。",
- "markdown.renderFailed": "无法显示文档：{error}"
+ "markdown.renderFailed": "无法显示文档：{error}",
+ "markdown.consentTitle": "显示远程图片？",
+ "markdown.consentMessage": "“{name}”会从互联网加载 {n} 张图片。托管这些图片的服务器将看到你的 IP 地址以及你打开了此文档。重启后 Nimble Newt 会再次询问。",
+ "markdown.saveFirst": "请先保存文件：网页链接和远程图片仅在已保存的文件中可用。"
 }

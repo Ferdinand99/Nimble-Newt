@@ -44,6 +44,7 @@ interface Pane {
   root: HTMLElement;
   bar: HTMLElement;
   barText: HTMLElement;
+  barButton: HTMLButtonElement;
   body: HTMLElement;
 }
 let pane: Pane | null = null;
@@ -53,6 +54,8 @@ interface ShownChunk {
 }
 /** What the view currently shows: the tab, the exact text (CodeMirror's Text is immutable) and its chunks. */
 let shown: { doc: Doc; text: unknown; chunks: ShownChunk[] } | null = null;
+/** Main-thread work per step of a render before the window gets a turn. */
+const SLICE_MS = 8;
 let shownView: MdView = "edit";
 let renderTimer: number | undefined;
 let lastRenderMs = 0;
@@ -69,7 +72,7 @@ const editorHasFocus = (): boolean => !!document.getElementById("editor")?.conta
 function ensurePane(): Pane {
   if (pane) return pane;
   const barText = h("span", { class: "md-bar-text" });
-  const show = h("button", { class: "btn btn-sm", type: "button", onclick: () => allowRemoteImages() }, t("markdown.showImages"));
+  const show = h("button", { class: "btn btn-sm", type: "button", onclick: () => void allowRemoteImages() }, t("markdown.showImages"));
   const bar = h("div", { class: "md-bar", role: "status", hidden: true }, barText, show);
   const body = h("article", { class: "md-body", tabIndex: 0, "aria-label": t("markdown.preview") });
   const root = h("section", { class: "md-preview", hidden: true }, bar, body);
@@ -81,7 +84,7 @@ function ensurePane(): Pane {
   body.addEventListener("load", () => (blocks = null), true); // an image changed the layout
   new ResizeObserver(() => (blocks = null)).observe(body);
   col().append(root);
-  pane = { root, bar, barText, body };
+  pane = { root, bar, barText, barButton: show, body };
   // The read view is not editable: focus that lands in the hidden editor (a click that WebKit does not
   // move to the button, a command that focuses the editor) goes to the rendered view instead.
   document.getElementById("editor")!.addEventListener("focusin", () => {
@@ -173,7 +176,7 @@ async function render(fresh: boolean): Promise<void> {
   try {
     chunks = await m.renderChunksAsync(text.toString());
   } catch (e) {
-    if (alive() && pane) {
+    if (alive() && pane && !(e instanceof m.Superseded)) {
       shown = null;
       pane.body.replaceChildren(h("p", { class: "md-error" }, t("markdown.renderFailed", { error: errorMessage(e) })));
     }
@@ -181,46 +184,49 @@ async function render(fresh: boolean): Promise<void> {
   }
   if (!alive() || workspace.active !== d || effectiveMdView(d) === "edit" || !pane) return;
   const body = pane.body;
-  // Chunks equal to what is shown keep their elements (and loaded images); only the changed middle is
-  // sanitised again, a few chunks at a time so that the window stays responsive.
+  // Chunks equal to what is shown keep their elements (and loaded images). The changed middle is
+  // sanitised and swapped in chunk by chunk, in short slices, so the window stays responsive even
+  // when much of a large document changed. `shown` always describes what is in the page, so a newer
+  // render can take over at any slice.
   const prev = shown?.doc === d ? shown.chunks : [];
   if (!prev.length) body.replaceChildren();
   let head = 0;
   while (head < prev.length && head < chunks.length && prev[head].html === chunks[head].html) head++;
   let tail = 0;
   while (tail < prev.length - head && tail < chunks.length - head && prev[prev.length - 1 - tail].html === chunks[chunks.length - 1 - tail].html) tail++;
-  const made: ShownChunk[] = [];
+  const done = prev.slice(0, head);
+  const old = prev.slice(head, prev.length - tail);
+  const after = prev.slice(prev.length - tail);
+  const anchor = after.length ? after[0].el : null;
+  const made: HTMLElement[] = [];
   let slice = performance.now();
   for (let i = head; i < chunks.length - tail; i++) {
     const el = h("div", { class: "md-chunk" });
     el.append(m.sanitizeMarkdown(chunks[i].html).fragment);
-    made.push({ html: chunks[i].html, el });
-    // The first render fills the view as it goes; later ones swap the changed part in at once.
-    if (!prev.length) body.append(el);
-    if (performance.now() - slice > 12) {
+    const replaced = old.shift();
+    if (replaced) replaced.el.replaceWith(el);
+    else body.insertBefore(el, anchor);
+    done.push({ html: chunks[i].html, el });
+    made.push(el);
+    if (performance.now() - slice > SLICE_MS) {
+      shown = { doc: d, text: null, chunks: [...done, ...old, ...after] };
       await m.pause();
-      if (!alive() || !pane) return;
+      if (!alive() || !pane) {
+        if (made.length) decorate(d, made, m);
+        return;
+      }
       slice = performance.now();
     }
   }
-  if (prev.length) {
-    for (const old of prev.slice(head, prev.length - tail)) old.el.remove();
-    body.insertBefore(fragmentOf(made), tail ? prev[prev.length - tail].el : null);
-  }
-  const all = [...prev.slice(0, head), ...made, ...prev.slice(prev.length - tail)];
+  for (const o of old) o.el.remove();
+  const all = [...done, ...after];
   all.forEach((c, i) => (c.el.dataset.base = String(chunks[i].line)));
   shown = { doc: d, text, chunks: all };
   lastRenderMs = performance.now() - started;
   blocks = null;
-  decorate(d, made.map((c) => c.el), m);
+  decorate(d, made, m);
   if (shownView === "split") syncFromEditor();
   else if (fresh) setPreviewScroll(stateOf(d).scrollTop ?? previewTopForLine(openedAtLine));
-}
-
-function fragmentOf(chunks: ShownChunk[]): DocumentFragment {
-  const f = document.createDocumentFragment();
-  for (const c of chunks) f.append(c.el);
-  return f;
 }
 
 /** After a render, for the new chunks: link titles, images and code colours. */
@@ -236,15 +242,20 @@ function decorate(d: Doc, roots: HTMLElement[], m: Lib): void {
     }
     for (const img of root.querySelectorAll<HTMLImageElement>("img[data-md-blocked]")) placeholder(img, t("markdown.imageBlocked"));
     loadLocalImages(d, root);
-    if (st.remoteAllowed) loadRemoteImages(root);
+    if (st.remoteAllowed && d.path) loadRemoteImages(d.path, root);
     else for (const img of root.querySelectorAll<HTMLImageElement>("img[data-md-remote]")) placeholder(img, t("markdown.imageRemote"));
   }
-  if (pane) {
-    const remote = pane.body.querySelectorAll("img[data-md-remote]").length;
-    pane.bar.hidden = !remote || st.remoteAllowed;
-    pane.barText.textContent = t("markdown.remoteBlocked", { n: remote });
-  }
+  updateBar(d);
   void m.highlightBlocks(roots, () => shown?.doc === d && roots.every((r) => r.isConnected)).then(() => (blocks = null));
+}
+
+/** The bar above the document: remote images are held back, "Show images" (or "save first"). */
+function updateBar(d: Doc): void {
+  if (!pane) return;
+  const remote = pane.body.querySelectorAll("img[data-md-remote]").length;
+  pane.bar.hidden = !remote || stateOf(d).remoteAllowed;
+  pane.barText.textContent = d.path ? t("markdown.remoteBlocked", { n: remote }) : t("markdown.saveFirst");
+  pane.barButton.hidden = !d.path;
 }
 
 function placeholder(img: HTMLImageElement, why: string): void {
@@ -310,8 +321,8 @@ function loadLocalImages(d: Doc, root: ParentNode): void {
   }
 }
 
-/** Remote images download through the backend, four at a time. */
-function loadRemoteImages(root: ParentNode): void {
+/** Remote images download through the backend (which checks the user's consent), four at a time. */
+function loadRemoteImages(docPath: string, root: ParentNode): void {
   const imgs = [...root.querySelectorAll<HTMLImageElement>("img[data-md-remote]")];
   let next = 0;
   const worker = async (): Promise<void> => {
@@ -321,7 +332,7 @@ function loadRemoteImages(root: ParentNode): void {
       const url = img.dataset.mdRemote!;
       img.classList.add("md-img-loading");
       try {
-        const data = await cached(`R|${url}`, () => api.mdRemoteImage(url));
+        const data = await cached(`R|${url}`, () => api.mdRemoteImage(docPath, url));
         if (img.isConnected) {
           img.classList.remove("md-img-loading", "md-img-placeholder");
           img.src = data;
@@ -335,13 +346,23 @@ function loadRemoteImages(root: ParentNode): void {
   for (let i = 0; i < 4; i++) void worker();
 }
 
-function allowRemoteImages(): void {
+/** "Show images": the backend asks the user in its own dialog and remembers a yes for this document. */
+async function allowRemoteImages(): Promise<void> {
   const d = workspace.active;
-  if (!d || !pane) return;
+  if (!d?.path || !pane) return;
+  const docPath = d.path;
+  const count = pane.body.querySelectorAll("img[data-md-remote]").length;
+  let yes = false;
+  try {
+    yes = await api.mdAllowRemote(docPath, count);
+  } catch (e) {
+    toast(errorMessage(e), "error");
+  }
+  if (!yes || workspace.active !== d || !pane) return;
   stateOf(d).remoteAllowed = true;
-  pane.bar.hidden = true;
+  updateBar(d);
   for (const img of pane.body.querySelectorAll<HTMLImageElement>("img[data-md-remote]")) img.classList.remove("md-img-placeholder");
-  loadRemoteImages(pane.body);
+  loadRemoteImages(docPath, pane.body);
 }
 
 // ---- links -------------------------------------------------------------------------------------------------
@@ -353,16 +374,16 @@ function onClick(e: MouseEvent): void {
   e.preventDefault();
   const d = workspace.active;
   const kind = a.dataset.mdLink;
-  const target = a.dataset.mdHref ?? "";
   if (kind === "anchor") {
-    const el = pane.body.querySelector(`#${CSS.escape(`user-content-${target}`)}`) ?? pane.body.querySelector(`[name="${CSS.escape(`user-content-${target}`)}"]`);
+    const id = `user-content-${a.dataset.mdHref ?? ""}`;
+    const el = pane.body.querySelector(`#${CSS.escape(id)}`) ?? pane.body.querySelector(`[name="${CSS.escape(id)}"]`);
     if (el) el.scrollIntoView({ block: "start" });
   } else if (kind === "external") {
-    api.openExternal(target).catch((err) => toast(errorMessage(err), "error"));
+    if (!d?.path) return void toast(t("markdown.saveFirst"), "info");
+    api.openExternal(d.path, a.dataset.mdHref ?? "").catch((err) => toast(errorMessage(err), "error"));
   } else if (kind === "markdown") {
     if (!d?.path) return void toast(t("markdown.linkNeedsSave"), "info");
-    const rel = target.split("#")[0];
-    const path = resolveRelative(d.path, rel);
+    const path = resolveRelative(d.path, a.dataset.mdPath ?? "");
     if (!path) return void toast(t("markdown.linkBlocked"), "info");
     void workspace.openPaths([path]);
   } else if (kind === "blocked") {
@@ -372,29 +393,84 @@ function onClick(e: MouseEvent): void {
 
 // ---- scrolling together ------------------------------------------------------------------------------------
 
-/** Source line (0-based) and position in the rendered view of each block, sorted, both increasing. */
-let blocks: { line: number; top: number }[] | null = null;
+type Point = { line: number; top: number };
+
+/**
+ * Where source lines are in the rendered view, in two levels so that a long document is cheap: every
+ * chunk (to find the chunk), and the top-level blocks of a chunk only when a position in it is asked
+ * for. Chunks out of sight are not laid out (content-visibility); reading a chunk's own box does not
+ * change that, so only the one or two chunks in question are laid out.
+ */
+let blocks: { base: number; chunks: (Point & { i: number })[]; fine: Map<number, Point[]> } | null = null;
 let driver: "editor" | "preview" | null = null;
 let driverUntil = 0;
 let frame = 0;
 
-function blockMap(): { line: number; top: number }[] {
+function coarse(): NonNullable<typeof blocks> {
   if (blocks) return blocks;
   const body = pane!.body;
   const base = body.getBoundingClientRect().top - body.scrollTop;
-  const out: { line: number; top: number }[] = [{ line: 0, top: 0 }];
-  for (const chunk of shown?.chunks ?? []) {
-    const first = Number(chunk.el.dataset.base);
-    for (const el of chunk.el.querySelectorAll<HTMLElement>("[data-line]")) {
-      const line = first + Number(el.dataset.line);
-      if (!Number.isFinite(line)) continue;
-      const top = el.getBoundingClientRect().top - base;
-      const last = out[out.length - 1];
-      if (line > last.line && top > last.top) out.push({ line, top });
-    }
+  const chunks: (Point & { i: number })[] = [];
+  (shown?.chunks ?? []).forEach((c, i) => {
+    const first = c.el.firstElementChild as HTMLElement | null;
+    if (!first?.dataset.line) return;
+    const line = Number(c.el.dataset.base) + Number(first.dataset.line);
+    // The chunk's own box: reading it does not lay out a chunk that is out of sight.
+    const top = c.el.getBoundingClientRect().top - base;
+    const last = chunks[chunks.length - 1];
+    if (Number.isFinite(line) && (!last || (line > last.line && top >= last.top))) chunks.push({ line, top, i });
+  });
+  return (blocks = { base, chunks, fine: new Map() });
+}
+
+function fineOf(i: number): Point[] {
+  const b = coarse();
+  let pts = b.fine.get(i);
+  if (pts) return pts;
+  pts = [];
+  const c = shown!.chunks[i];
+  const first = Number(c.el.dataset.base);
+  for (const el of c.el.children as HTMLCollectionOf<HTMLElement>) {
+    if (!el.dataset.line) continue;
+    const line = first + Number(el.dataset.line);
+    if (Number.isFinite(line)) pts.push({ line, top: el.getBoundingClientRect().top - b.base });
   }
-  out.push({ line: workspace.view.state.doc.lines, top: Math.max(out[out.length - 1].top + 1, body.scrollHeight) });
-  return (blocks = out);
+  b.fine.set(i, pts);
+  return pts;
+}
+
+/** The points around coarse entry `k` (-1: before the first chunk): its blocks, the next chunk's, the ends. */
+function around(k: number): Point[] {
+  const b = coarse();
+  const raw: Point[] = [];
+  if (k < 0) raw.push({ line: 0, top: 0 });
+  for (const j of [k, k + 1]) if (j >= 0 && j < b.chunks.length) raw.push(...fineOf(b.chunks[j].i));
+  if (k + 1 >= b.chunks.length) {
+    const last = raw[raw.length - 1]?.top ?? 0;
+    raw.push({ line: workspace.view.state.doc.lines, top: Math.max(last + 1, pane!.body.scrollHeight) });
+  }
+  const out: Point[] = [];
+  for (const p of raw) {
+    const last = out[out.length - 1];
+    if (!last || (p.line > last.line && p.top > last.top)) out.push(p);
+  }
+  return out;
+}
+
+/** The last coarse entry whose `key` is at most `v`, or -1. */
+function findChunk(key: "line" | "top", v: number): number {
+  const list = coarse().chunks;
+  let lo = 0;
+  let hi = list.length - 1;
+  let found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (list[mid][key] <= v) {
+      found = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return found;
 }
 
 /** The editor's top visible line, 0-based, with the fraction of it scrolled past. */
@@ -408,7 +484,7 @@ function editorTopLine(): number {
 }
 
 function previewTopForLine(lineF: number): number {
-  const map = blockMap();
+  const map = around(findChunk("line", lineF));
   for (let i = map.length - 2; i >= 0; i--) {
     const a = map[i];
     if (lineF >= a.line) {
@@ -416,11 +492,11 @@ function previewTopForLine(lineF: number): number {
       return a.top + ((lineF - a.line) / Math.max(1, b.line - a.line)) * (b.top - a.top);
     }
   }
-  return 0;
+  return map[0]?.top ?? 0;
 }
 
 function lineForPreviewTop(top: number): number {
-  const map = blockMap();
+  const map = around(findChunk("top", top));
   for (let i = map.length - 2; i >= 0; i--) {
     const a = map[i];
     if (top >= a.top) {
@@ -428,7 +504,7 @@ function lineForPreviewTop(top: number): number {
       return a.line + Math.min(1, (top - a.top) / Math.max(1, b.top - a.top)) * (b.line - a.line);
     }
   }
-  return 0;
+  return map[0]?.line ?? 0;
 }
 
 function setPreviewScroll(top: number): void {

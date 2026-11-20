@@ -74,9 +74,22 @@
   box-shadow: inset 0 0 0 2px var(--brand-ring);
 }
 
-/* The document is rendered in chunks (only changed chunks are replaced while typing); they add no boxes. */
+/* The document is rendered in chunks (only changed chunks are replaced while typing). Chunks out of
+   sight are not laid out or painted (they keep their last size), so an edit in a long document does
+   not lay out the whole document again. A chunk does not let margins collapse through its edges, so
+   its last block keeps its bottom margin and a heading that starts a chunk takes only the rest of its
+   own: the spacing is the same as without chunks. */
 .md-chunk {
-  display: contents;
+  display: block;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+.md-chunk > :is(h1, h2, h3, h4, h5, h6, hr):first-child {
+  margin-top: 0.5em;
+}
+.md-body blockquote > :last-child,
+.md-body li > :last-child {
+  margin-bottom: 0;
 }
 .md-body > .md-chunk:first-child > :first-child {
   margin-top: 0;
@@ -203,6 +216,17 @@
   background: var(--bg-2);
   font-weight: 600;
 }
+/* A large list or table is rendered in several parts (see renderChunks); they join up without gaps,
+   and the parts of a table share fixed column widths so that the columns line up. */
+.md-body .md-split-list {
+  margin-bottom: 0;
+}
+.md-body table.md-split-table {
+  display: table;
+  width: 100%;
+  margin-bottom: 0;
+  table-layout: fixed;
+}
 .md-body img {
   max-width: 100%;
   height: auto;
@@ -242,7 +266,7 @@
 .segmented.status-seg > button {
   min-height: 20px;
   padding: 0 8px;
-  border-radius: 5px;
+  border-radius: calc(var(--r-xs) - 1px);
   color: inherit;
   font-size: 0.6875rem;
 }

@@ -582,5 +582,8 @@
  "markdown.imageFailed": "afbeelding kon niet worden geladen: {error}",
  "markdown.linkBlocked": "Deze link wordt niet geopend (alleen web-, mail- en Markdown-links).",
  "markdown.linkNeedsSave": "Sla het bestand eerst op om links naar andere bestanden te volgen.",
- "markdown.renderFailed": "Het document kon niet worden weergegeven: {error}"
+ "markdown.renderFailed": "Het document kon niet worden weergegeven: {error}",
+ "markdown.consentTitle": "Afbeeldingen van internet tonen?",
+ "markdown.consentMessage": "“{name}” laadt {n} afbeeldingen van internet. De servers waarop ze staan, zien je IP-adres en dat je dit document hebt geopend. Nimble Newt vraagt het opnieuw na een herstart.",
+ "markdown.saveFirst": "Sla het bestand eerst op: weblinks en afbeeldingen van internet werken alleen in opgeslagen bestanden."
 }

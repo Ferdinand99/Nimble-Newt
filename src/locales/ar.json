@@ -582,5 +582,8 @@
  "markdown.imageFailed": "تعذّر تحميل الصورة: {error}",
  "markdown.linkBlocked": "لا يُفتح هذا الرابط (تُفتح روابط الويب والبريد وMarkdown فقط).",
  "markdown.linkNeedsSave": "احفظ الملف أولًا لفتح الروابط إلى ملفات أخرى.",
- "markdown.renderFailed": "تعذّر عرض المستند: {error}"
+ "markdown.renderFailed": "تعذّر عرض المستند: {error}",
+ "markdown.consentTitle": "إظهار الصور البعيدة؟",
+ "markdown.consentMessage": "يحمّل «{name}» عدد {n} من الصور من الإنترنت. سترى الخوادم التي تستضيفها عنوان IP الخاص بك وأنك فتحت هذا المستند. سيسأل Nimble Newt مجددًا بعد إعادة التشغيل.",
+ "markdown.saveFirst": "احفظ الملف أولًا: روابط الويب والصور البعيدة تعمل في الملفات المحفوظة فقط."
 }

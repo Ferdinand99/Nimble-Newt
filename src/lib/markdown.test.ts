@@ -111,6 +111,51 @@ describe("renderChunks (what the view re-renders while typing)", () => {
     // Generous: CI machines are slow. It runs in a worker in the app.
     expect(performance.now() - started).toBeLessThan(10_000);
   });
+
+  // One huge top-level block would otherwise be one huge chunk, sanitised in one go after every pause.
+  const bigList = (n: number, ordered: boolean, edit = -1) =>
+    Array.from({ length: n }, (_, i) => `${ordered ? `${i + 1}.` : "-"} item ${i === edit ? "EDITED" : "entry"} ${i} with [a link](https://example.com/${i})`).join("\n") + "\n";
+  const bigTable = (n: number, edit = -1) =>
+    `| name | value |\n|---|---:|\n${Array.from({ length: n }, (_, i) => `| row ${i === edit ? "EDITED" : "cell"} ${i} | ${i * 7} |`).join("\n")}\n`;
+
+  it("splits a large list between items, numbers continue, one edit changes one chunk", () => {
+    const chunks = renderChunks(bigList(2000, true));
+    expect(chunks.length).toBeGreaterThan(20);
+    const div = document.createElement("div");
+    div.innerHTML = chunks.map((c) => c.html).join("");
+    const lists = [...div.querySelectorAll("ol")];
+    expect(lists.length).toBe(chunks.length);
+    // Each part starts where the previous one ended.
+    let next = 1;
+    for (const ol of lists) {
+      expect(Number(ol.getAttribute("start") ?? 1)).toBe(next);
+      next += ol.children.length;
+    }
+    expect(next).toBe(2001);
+    expect(div.querySelectorAll("li").length).toBe(2000);
+    const before = chunks.map((c) => c.html);
+    const after = renderChunks(bigList(2000, true, 1000)).map((c) => c.html);
+    const kept = new Set(before);
+    expect(after.filter((h) => !kept.has(h)).length).toBeLessThanOrEqual(2);
+    // Unordered lists split the same way, without numbers.
+    expect(renderChunks(bigList(2000, false)).every((c) => !c.html.includes("start="))).toBe(true);
+  });
+
+  it("splits a large table between rows: the header once, fixed columns in every part", () => {
+    const chunks = renderChunks(bigTable(3000));
+    expect(chunks.length).toBeGreaterThan(20);
+    const div = document.createElement("div");
+    div.innerHTML = chunks.map((c) => c.html).join("");
+    expect(div.querySelectorAll("thead").length).toBe(1);
+    expect(div.querySelectorAll("tbody tr").length).toBe(3000);
+    expect([...div.querySelectorAll("table")].every((t) => t.classList.contains("md-split-table"))).toBe(true);
+    const before = chunks.map((c) => c.html);
+    const after = renderChunks(bigTable(3000, 1500)).map((c) => c.html);
+    const kept = new Set(before);
+    expect(after.filter((h) => !kept.has(h)).length).toBeLessThanOrEqual(2);
+    // Small tables and lists stay whole.
+    expect(renderChunks("| a |\n|---|\n| 1 |\n\n- x\n- y\n").map((c) => c.html).join("")).not.toContain("md-split");
+  });
 });
 
 describe("fenceLanguage", () => {

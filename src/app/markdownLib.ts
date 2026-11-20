@@ -11,9 +11,58 @@ export type { Chunk };
 // ---- parsing off the main thread -----------------------------------------------------------------------------
 
 type Reply = { id: number; chunks?: Chunk[]; error?: string };
+type Job = { src: string; resolve: (c: Chunk[]) => void; reject: (e: Error) => void };
+
+/** A parse that runs longer than this is stopped: the worker is ended and made again for the next one. */
+export const WATCHDOG_MS = 5000;
+
+/** `undefined`: not started yet; `null`: the webview cannot run it, parse on the main thread. */
 let worker: Worker | null | undefined;
 let nextId = 0;
-const waiting = new Map<number, { src: string; resolve: (c: Chunk[]) => void; reject: (e: Error) => void }>();
+/** The parse the worker is busy with, and the newest one waiting; older waiting ones are dropped. */
+let busy: (Job & { id: number; timer: number }) | null = null;
+let queued: Job | null = null;
+
+/** Thrown for a request that a newer one replaced before it started. */
+export class Superseded extends Error {}
+
+function onReply(e: MessageEvent<Reply>): void {
+  if (!busy || e.data.id !== busy.id) return;
+  const job = busy;
+  busy = null;
+  clearTimeout(job.timer);
+  if (e.data.chunks) job.resolve(e.data.chunks);
+  else job.reject(new Error(e.data.error ?? "render failed"));
+  pump();
+}
+
+function onWatchdog(): void {
+  if (!busy) return;
+  const job = busy;
+  busy = null;
+  worker?.terminate();
+  worker = undefined;
+  job.reject(new Error("the document took too long to render"));
+  pump();
+}
+
+/** A webview that cannot start the worker: render on the main thread from now on. */
+function onFailure(e: Event): void {
+  e.preventDefault();
+  worker?.terminate();
+  worker = null;
+  if (busy) clearTimeout(busy.timer);
+  for (const job of [busy, queued]) {
+    if (!job) continue;
+    try {
+      job.resolve(renderChunks(job.src));
+    } catch (err) {
+      job.reject(err as Error);
+    }
+  }
+  busy = null;
+  queued = null;
+}
 
 function getWorker(): Worker | null {
   if (worker !== undefined) return worker;
@@ -22,38 +71,38 @@ function getWorker(): Worker | null {
   } catch {
     return (worker = null);
   }
-  worker.onmessage = (e: MessageEvent<Reply>) => {
-    const w = waiting.get(e.data.id);
-    if (!w) return;
-    waiting.delete(e.data.id);
-    if (e.data.chunks) w.resolve(e.data.chunks);
-    else w.reject(new Error(e.data.error ?? "render failed"));
-  };
-  // A webview that cannot start the worker: render on the main thread from now on.
-  worker.onerror = (e) => {
-    e.preventDefault();
-    worker?.terminate();
-    worker = null;
-    for (const [id, w] of waiting) {
-      waiting.delete(id);
-      try {
-        w.resolve(renderChunks(w.src));
-      } catch (err) {
-        w.reject(err as Error);
-      }
-    }
-  };
+  worker.onmessage = onReply;
+  worker.onerror = onFailure;
   return worker;
 }
 
-/** Parses and renders `src` into chunks of (unsanitised) HTML, in a worker when the webview allows it. */
-export function renderChunksAsync(src: string): Promise<Chunk[]> {
+function pump(): void {
+  if (busy || !queued) return;
   const w = getWorker();
-  if (!w) return Promise.resolve().then(() => renderChunks(src));
+  const job = queued;
+  queued = null;
+  if (!w) {
+    try {
+      job.resolve(renderChunks(job.src));
+    } catch (err) {
+      job.reject(err as Error);
+    }
+    return;
+  }
+  const id = ++nextId;
+  busy = { ...job, id, timer: window.setTimeout(onWatchdog, WATCHDOG_MS) };
+  w.postMessage({ id, src: job.src });
+}
+
+/**
+ * Parses and renders `src` into chunks of (unsanitised) HTML, in a worker when the webview allows it.
+ * Only the newest request waits while the worker is busy; an older waiting one fails with `Superseded`.
+ */
+export function renderChunksAsync(src: string): Promise<Chunk[]> {
   return new Promise((resolve, reject) => {
-    const id = ++nextId;
-    waiting.set(id, { src, resolve, reject });
-    w.postMessage({ id, src });
+    queued?.reject(new Superseded("a newer render replaced this one"));
+    queued = { src, resolve, reject };
+    pump();
   });
 }
 

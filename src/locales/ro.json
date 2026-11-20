@@ -582,5 +582,8 @@
  "markdown.imageFailed": "imaginea nu a putut fi încărcată: {error}",
  "markdown.linkBlocked": "Acest link nu se deschide (doar linkuri web, de e-mail și Markdown).",
  "markdown.linkNeedsSave": "Salvează mai întâi fișierul pentru a urma linkuri către alte fișiere.",
- "markdown.renderFailed": "Documentul nu a putut fi afișat: {error}"
+ "markdown.renderFailed": "Documentul nu a putut fi afișat: {error}",
+ "markdown.consentTitle": "Afișezi imaginile de pe internet?",
+ "markdown.consentMessage": "„{name}” încarcă {n} imagini de pe internet. Serverele care le găzduiesc vor vedea adresa ta IP și faptul că ai deschis acest document. Nimble Newt te întreabă din nou după o repornire.",
+ "markdown.saveFirst": "Salvează mai întâi fișierul: linkurile web și imaginile de pe internet funcționează doar în fișiere salvate."
 }

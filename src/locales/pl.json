@@ -582,5 +582,8 @@
  "markdown.imageFailed": "nie udało się wczytać obrazu: {error}",
  "markdown.linkBlocked": "Ten link nie zostanie otwarty (tylko linki internetowe, e-mail i Markdown).",
  "markdown.linkNeedsSave": "Najpierw zapisz plik, aby przechodzić do innych plików przez linki.",
- "markdown.renderFailed": "Nie udało się wyświetlić dokumentu: {error}"
+ "markdown.renderFailed": "Nie udało się wyświetlić dokumentu: {error}",
+ "markdown.consentTitle": "Pokazać obrazy z internetu?",
+ "markdown.consentMessage": "„{name}” wczytuje {n} obrazów z internetu. Serwery, na których są, zobaczą twój adres IP i to, że otwarto ten dokument. Nimble Newt zapyta ponownie po ponownym uruchomieniu.",
+ "markdown.saveFirst": "Najpierw zapisz plik: linki internetowe i obrazy z internetu działają tylko w zapisanych plikach."
 }

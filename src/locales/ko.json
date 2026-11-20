@@ -582,5 +582,8 @@
  "markdown.imageFailed": "이미지를 불러올 수 없습니다: {error}",
  "markdown.linkBlocked": "이 링크는 열리지 않습니다(웹, 메일, Markdown 링크만 열림).",
  "markdown.linkNeedsSave": "다른 파일로 가는 링크를 따라가려면 먼저 파일을 저장하세요.",
- "markdown.renderFailed": "문서를 표시할 수 없습니다: {error}"
+ "markdown.renderFailed": "문서를 표시할 수 없습니다: {error}",
+ "markdown.consentTitle": "원격 이미지를 표시할까요?",
+ "markdown.consentMessage": "“{name}” 문서는 인터넷에서 이미지 {n}개를 불러옵니다. 이미지를 호스팅하는 서버는 사용자의 IP 주소와 이 문서를 연 사실을 알게 됩니다. Nimble Newt는 다시 시작한 뒤 다시 묻습니다.",
+ "markdown.saveFirst": "먼저 파일을 저장하세요. 웹 링크와 원격 이미지는 저장된 파일에서만 작동합니다."
 }

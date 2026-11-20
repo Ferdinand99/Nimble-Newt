@@ -582,5 +582,8 @@
  "markdown.imageFailed": "kunne ikke laste bildet: {error}",
  "markdown.linkBlocked": "Denne lenken åpnes ikke (bare nett-, e-post- og Markdown-lenker).",
  "markdown.linkNeedsSave": "Lagre filen først for å følge lenker til andre filer.",
- "markdown.renderFailed": "Kunne ikke vise dokumentet: {error}"
+ "markdown.renderFailed": "Kunne ikke vise dokumentet: {error}",
+ "markdown.consentTitle": "Vise bilder fra nettet?",
+ "markdown.consentMessage": "«{name}» laster {n} bilder fra nettet. Serverne som har dem, ser IP-adressen din og at du åpnet dokumentet. Nimble Newt spør igjen etter en omstart.",
+ "markdown.saveFirst": "Lagre filen først: nettlenker og bilder fra nettet virker bare i lagrede filer."
 }

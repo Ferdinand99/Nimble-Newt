@@ -50,15 +50,15 @@ describe("sanitizeMarkdown", () => {
 
   it("marks web, mail, anchor and Markdown links for the view", () => {
     const { div } = clean("[w](https://example.com/x) [m](mailto:a@example.com) [h](#intro) [n](other.md#part) [p](../up/notes.markdown) [t](notes.txt) [abs](/etc/x.md)");
-    const kinds = [...div.querySelectorAll("a")].map((a) => [a.dataset.mdLink, a.dataset.mdHref ?? null]);
+    const kinds = [...div.querySelectorAll("a")].map((a) => [a.dataset.mdLink, a.dataset.mdHref ?? a.dataset.mdPath ?? null, a.dataset.mdFragment ?? null]);
     expect(kinds).toEqual([
-      ["external", "https://example.com/x"],
-      ["external", "mailto:a@example.com"],
-      ["anchor", "intro"],
-      ["markdown", "other.md#part"],
-      ["markdown", "../up/notes.markdown"],
-      ["blocked", null],
-      ["blocked", null],
+      ["external", "https://example.com/x", null],
+      ["external", "mailto:a@example.com", null],
+      ["anchor", "intro", null],
+      ["markdown", "other.md", "part"],
+      ["markdown", "../up/notes.markdown", null],
+      ["blocked", null, null],
+      ["blocked", null, null],
     ]);
   });
 
@@ -147,5 +147,40 @@ describe("sanitizeMarkdown", () => {
     expect(div.querySelector("sub")?.textContent).toBe("2");
     expect(div.querySelector("abbr")?.getAttribute("title")).toBe("HyperText");
     expect(div.querySelector("p[align=center] b")?.textContent).toBe("centered");
+  });
+
+  it("holds against namespace confusion and mutation XSS payloads", () => {
+    const payloads = [
+      '<noscript><p title="</noscript><img src=x onerror=alert(1)>">',
+      "<math><mtext><table><mglyph><style><img src=x onerror=alert(2)>",
+      '<svg></p><style><a id="</style><img src=1 onerror=alert(3)>">',
+      "<form><math><mtext></form><form><mglyph><style></math><img src onerror=alert(4)>",
+      '<a href="&#x6A;avascript:alert(5)">x</a>',
+      '<img src="x" alt="`<img src=x onerror=alert(6)>`">',
+      "<template><img src=x onerror=alert(7)></template>",
+      '<iframe srcdoc="<script>alert(8)</script>"></iframe>',
+    ];
+    for (const p of payloads) {
+      const { div } = clean(p);
+      // Serialise and parse again, as a later innerHTML round trip would: still nothing active.
+      const again = document.createElement("div");
+      again.innerHTML = div.innerHTML;
+      for (const root of [div, again]) {
+        expect(attrs(root).filter((a) => a.startsWith("on")), p).toEqual([]);
+        expect(root.querySelector("script, style, iframe, svg, math, template, noscript"), p).toBeNull();
+        expect([...root.querySelectorAll("a")].some((a) => /script:/i.test(a.getAttribute("href") ?? "")), p).toBe(false);
+      }
+    }
+  });
+
+  it("keeps an HTML block that spans two chunks harmless: each chunk is sanitised on its own", () => {
+    // The view sanitises chunk by chunk; an element opened in one chunk and closed in the next must
+    // not let markup from the second chunk escape (it simply ends up as two separate fragments).
+    const first = sanitizeMarkdown('<div title="a\n\nb');
+    const second = sanitizeMarkdown('"><img src=x onerror=alert(1)></div>');
+    const div = document.createElement("div");
+    div.append(first.fragment, second.fragment);
+    expect(attrs(div).filter((a) => a.startsWith("on"))).toEqual([]);
+    expect(div.querySelector("img")?.hasAttribute("src")).toBe(false);
   });
 });

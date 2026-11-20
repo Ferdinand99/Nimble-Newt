@@ -582,5 +582,8 @@
  "markdown.imageFailed": "bilden kunde inte läsas in: {error}",
  "markdown.linkBlocked": "Den här länken öppnas inte (bara webb-, e-post- och Markdown-länkar).",
  "markdown.linkNeedsSave": "Spara filen först för att följa länkar till andra filer.",
- "markdown.renderFailed": "Dokumentet kunde inte visas: {error}"
+ "markdown.renderFailed": "Dokumentet kunde inte visas: {error}",
+ "markdown.consentTitle": "Visa bilder från webben?",
+ "markdown.consentMessage": "”{name}” läser in {n} bilder från webben. Servrarna som har dem ser din IP-adress och att du öppnade dokumentet. Nimble Newt frågar igen efter en omstart.",
+ "markdown.saveFirst": "Spara filen först: webblänkar och bilder från webben fungerar bara i sparade filer."
 }

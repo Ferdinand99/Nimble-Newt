@@ -582,5 +582,8 @@
  "markdown.imageFailed": "無法載入圖片：{error}",
  "markdown.linkBlocked": "此連結不會開啟（僅開啟網頁、郵件與 Markdown 連結）。",
  "markdown.linkNeedsSave": "請先儲存檔案，才能跟隨指向其他檔案的連結。",
- "markdown.renderFailed": "無法顯示文件：{error}"
+ "markdown.renderFailed": "無法顯示文件：{error}",
+ "markdown.consentTitle": "顯示遠端圖片？",
+ "markdown.consentMessage": "「{name}」會從網際網路載入 {n} 張圖片。託管這些圖片的伺服器將看到你的 IP 位址以及你開啟了此文件。重新啟動後 Nimble Newt 會再次詢問。",
+ "markdown.saveFirst": "請先儲存檔案：網頁連結與遠端圖片僅在已儲存的檔案中可用。"
 }

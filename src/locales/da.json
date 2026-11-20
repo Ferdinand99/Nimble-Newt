@@ -582,5 +582,8 @@
  "markdown.imageFailed": "billedet kunne ikke indlæses: {error}",
  "markdown.linkBlocked": "Dette link åbnes ikke (kun web-, mail- og Markdown-links).",
  "markdown.linkNeedsSave": "Gem filen først for at følge links til andre filer.",
- "markdown.renderFailed": "Dokumentet kunne ikke vises: {error}"
+ "markdown.renderFailed": "Dokumentet kunne ikke vises: {error}",
+ "markdown.consentTitle": "Vis billeder fra nettet?",
+ "markdown.consentMessage": "“{name}” indlæser {n} billeder fra nettet. Serverne, der har dem, ser din IP-adresse, og at du åbnede dokumentet. Nimble Newt spørger igen efter en genstart.",
+ "markdown.saveFirst": "Gem filen først: weblinks og billeder fra nettet virker kun i gemte filer."
 }

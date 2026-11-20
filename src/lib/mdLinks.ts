@@ -62,6 +62,8 @@ export function classifyLink(raw: string | null | undefined): LinkTarget {
   const decoded = decode(path);
   if (decoded === null || !decoded || decoded.includes("\0")) return { kind: "blocked" };
   if (/^[\\/]/.test(decoded)) return { kind: "blocked" };
+  // A colon is a drive letter or an NTFS alternate data stream ("notes.md:hidden.md").
+  if (decoded.includes(":")) return { kind: "blocked" };
   if (!MARKDOWN_EXT.test(decoded)) return { kind: "blocked" };
   return { kind: "markdown", path: decoded, fragment: decode(fragment) ?? "" };
 }
@@ -88,8 +90,11 @@ export function resolveRelative(docPath: string, rel: string): string | null {
   const sep = docPath.includes("\\") && !docPath.includes("/") ? "\\" : "/";
   const parts = docPath.split(/[\\/]/);
   parts.pop(); // the file name
-  const root = parts.length ? parts[0] : "";
-  const stack = parts.slice(1);
+  // A UNC path (\\server\share\...) has \\server\share as its root, which ".." must not leave.
+  const rootParts = /^[\\/]{2}[^\\/]/.test(docPath) ? 4 : 1;
+  if (parts.length < rootParts) return null;
+  const root = parts.slice(0, rootParts).join(sep);
+  const stack = parts.slice(rootParts);
   for (const seg of rel.split(/[\\/]/)) {
     if (seg === "" || seg === ".") continue;
     if (seg === "..") {

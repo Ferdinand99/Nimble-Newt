@@ -582,5 +582,8 @@
  "markdown.imageFailed": "לא ניתן לטעון את התמונה: {error}",
  "markdown.linkBlocked": "קישור זה לא נפתח (רק קישורי אינטרנט, דואר ו-Markdown).",
  "markdown.linkNeedsSave": "יש לשמור את הקובץ קודם כדי לעקוב אחר קישורים לקבצים אחרים.",
- "markdown.renderFailed": "לא ניתן להציג את המסמך: {error}"
+ "markdown.renderFailed": "לא ניתן להציג את המסמך: {error}",
+ "markdown.consentTitle": "להציג תמונות מרוחקות?",
+ "markdown.consentMessage": "„{name}” טוען {n} תמונות מהאינטרנט. השרתים שמארחים אותן יראו את כתובת ה-IP שלך ושפתחת את המסמך. Nimble Newt ישאל שוב אחרי הפעלה מחדש.",
+ "markdown.saveFirst": "יש לשמור את הקובץ קודם: קישורי אינטרנט ותמונות מרוחקות פועלים רק בקבצים שמורים."
 }

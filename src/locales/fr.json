@@ -582,5 +582,8 @@
  "markdown.imageFailed": "impossible de charger l’image : {error}",
  "markdown.linkBlocked": "Ce lien n’est pas ouvert (seuls les liens web, e-mail et Markdown le sont).",
  "markdown.linkNeedsSave": "Enregistrez d’abord le fichier pour suivre les liens vers d’autres fichiers.",
- "markdown.renderFailed": "Impossible d’afficher le document : {error}"
+ "markdown.renderFailed": "Impossible d’afficher le document : {error}",
+ "markdown.consentTitle": "Afficher les images distantes ?",
+ "markdown.consentMessage": "« {name} » charge {n} images depuis Internet. Les serveurs qui les hébergent verront votre adresse IP et que vous avez ouvert ce document. Nimble Newt redemandera après un redémarrage.",
+ "markdown.saveFirst": "Enregistrez d’abord le fichier : les liens web et les images distantes ne fonctionnent que dans les fichiers enregistrés."
 }

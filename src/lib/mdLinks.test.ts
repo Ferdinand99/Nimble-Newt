@@ -24,6 +24,11 @@ describe("classifyLink", () => {
     expect(classifyLink("/etc/passwd.md")).toEqual({ kind: "blocked" });
     expect(classifyLink("\\\\server\\share\\a.md")).toEqual({ kind: "blocked" });
     expect(classifyLink("bad%zz.md")).toEqual({ kind: "blocked" });
+    // Alternate data streams and drive letters hidden in a relative path.
+    expect(classifyLink("./readme.md:hidden.md")).toEqual({ kind: "blocked" });
+    expect(classifyLink("sub/C%3A/x.md")).toEqual({ kind: "blocked" });
+    // A "#" that is part of the file name stays in the path.
+    expect(classifyLink("notes%23v2.md#top")).toEqual({ kind: "markdown", path: "notes#v2.md", fragment: "top" });
     expect(classifyLink("")).toEqual({ kind: "blocked" });
     expect(classifyLink(null)).toEqual({ kind: "blocked" });
   });
@@ -51,6 +56,12 @@ describe("resolveRelative", () => {
     expect(resolveRelative("/home/u/docs/readme.md", "../../x.md")).toBe("/home/x.md");
     expect(resolveRelative("C:\\Users\\u\\readme.md", "notes/a.md")).toBe("C:\\Users\\u\\notes\\a.md");
     expect(resolveRelative("C:\\Users\\u\\readme.md", "..\\..\\x.md")).toBe("C:\\x.md");
+  });
+  it("keeps \\\\server\\share as the root of a UNC path", () => {
+    expect(resolveRelative("\\\\server\\share\\docs\\a.md", "..\\x.md")).toBe("\\\\server\\share\\x.md");
+    expect(resolveRelative("\\\\server\\share\\docs\\a.md", "sub/b.md")).toBe("\\\\server\\share\\docs\\sub\\b.md");
+    expect(resolveRelative("\\\\server\\share\\docs\\a.md", "..\\..\\x.md")).toBeNull();
+    expect(resolveRelative("\\\\server\\share\\a.md", "..\\x.md")).toBeNull();
   });
   it("refuses to climb above the root", () => {
     expect(resolveRelative("/a/readme.md", "../../../x.md")).toBeNull();

@@ -582,5 +582,8 @@
  "markdown.imageFailed": "a kép nem tölthető be: {error}",
  "markdown.linkBlocked": "Ez a hivatkozás nem nyílik meg (csak webes, e-mail és Markdown-hivatkozások).",
  "markdown.linkNeedsSave": "Előbb mentsd a fájlt, hogy más fájlokra mutató hivatkozásokat követhess.",
- "markdown.renderFailed": "A dokumentum nem jeleníthető meg: {error}"
+ "markdown.renderFailed": "A dokumentum nem jeleníthető meg: {error}",
+ "markdown.consentTitle": "Megjelenjenek az internetes képek?",
+ "markdown.consentMessage": "A(z) „{name}” {n} képet tölt be az internetről. Az őket tároló szerverek látják az IP-címedet és azt, hogy megnyitottad ezt a dokumentumot. A Nimble Newt újraindítás után újra rákérdez.",
+ "markdown.saveFirst": "Előbb mentsd a fájlt: a webes hivatkozások és az internetes képek csak mentett fájlokban működnek."
 }
