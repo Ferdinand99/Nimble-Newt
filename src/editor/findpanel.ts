@@ -35,7 +35,7 @@ export function createFindPanel(view: EditorView): Panel {
   const bClose = h("button", { class: "btn btn-icon btn-plain btn-sm", type: "button", "aria-label": t("common.close"), onclick: () => { closeSearchPanel(view); view.focus(); } }, icon("x"));
   const bReplace = h("button", { class: "btn btn-sm", type: "button", onclick: () => replaceNext(view) }, t("find.replace"));
   const bReplaceAll = h("button", { class: "btn btn-sm", type: "button", onclick: () => replaceAll(view) }, t("find.replaceAll"));
-  const bExpand = h("button", { class: "btn btn-icon btn-plain btn-sm", type: "button", "aria-label": t("find.toggleReplace"), "aria-pressed": String(wantReplace), onclick: () => setReplace(replaceRow.hidden) }, icon("replace"));
+  const bExpand = h("button", { class: "btn btn-icon btn-plain btn-sm", type: "button", "aria-label": t("find.toggleReplace"), "aria-pressed": String(wantReplace), onclick: () => setReplace(Boolean(replaceRow.hidden)) }, icon("replace"));
 
   const replaceRow = h("div", { class: "find-row" }, replaceInput, bReplace, bReplaceAll);
   replaceRow.hidden = !wantReplace;
