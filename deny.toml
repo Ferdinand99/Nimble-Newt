@@ -1,6 +1,8 @@
 # cargo-deny configuration, used by the Audit workflow (advisories). [licenses].allow mirrors the
 # allowlist in about.toml (a unit test keeps them equal); about.toml is what CI enforces.
 [advisories]
+# An ignore that no longer matches anything in Cargo.lock fails the check, so stale ignores get removed.
+unused-ignored-advisory = "deny"
 ignore = [
     # Unmaintained crates that come in through Tauri's Linux stack (gtk3/glib
     # macros, zbus). Build-time macros or D-Bus plumbing; no fix until Tauri moves.
