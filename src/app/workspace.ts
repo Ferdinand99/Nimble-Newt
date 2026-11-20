@@ -705,6 +705,7 @@ export class Workspace {
       return false;
     }
     this.addRecent(path);
+    if (prev.path && prev.path !== path) void api.mdForget(prev.path).catch(() => {});
     this.emit("tabs");
     this.emit("active");
     this.updateWindowTitle();
@@ -745,6 +746,8 @@ export class Workspace {
     if (doc.path) {
       this.closed.push({ path: doc.path });
       if (this.closed.length > 20) this.closed.shift();
+      // The Markdown view's rights for this document (local images, consent for remote ones) end with the tab.
+      void api.mdForget(doc.path).catch(() => {});
     }
     this.disposeLarge(doc);
     this.docs.splice(i, 1);

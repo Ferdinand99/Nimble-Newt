@@ -262,6 +262,8 @@ export const api = {
   mdLocalImage: (docPath: string, src: string) => invoke<string>("md_local_image", { docPath, src }),
   /** Asks the user (in a dialog of the backend) whether the document may load remote images. */
   mdAllowRemote: (docPath: string, count: number) => invoke<boolean>("md_allow_remote", { docPath, count }),
+  /** A tab was closed: the backend forgets the document and the user's consent for its images. */
+  mdForget: (docPath: string) => invoke<void>("md_forget", { docPath }),
   /** A remote https image as a data: URL, once the user allowed remote images for the document. */
   mdRemoteImage: (docPath: string, url: string) => invoke<string>("md_remote_image", { docPath, url }),
   /** Opens an http, https or mailto link of an open document in the system's default program. */

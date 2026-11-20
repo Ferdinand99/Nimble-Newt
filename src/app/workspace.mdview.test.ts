@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RestoredTab, SessionMeta } from "../lib/api";
 
 const sessionSave = vi.fn(async (_meta: SessionMeta) => {});
+const mdForget = vi.fn(async (_path: string) => {});
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ setTitle: async () => {} }) }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
 vi.mock("../lib/api", async (importOriginal) => {
@@ -18,6 +19,7 @@ vi.mock("../lib/api", async (importOriginal) => {
         throw new Error("no files in this test");
       }),
       fileMeta: vi.fn(async () => ({ size: 0, large: false })),
+      mdForget: (path: string) => mdForget(path),
     },
   };
 });
@@ -38,6 +40,7 @@ describe("Markdown view per tab", () => {
   let ws: InstanceType<typeof Workspace>;
   beforeEach(() => {
     sessionSave.mockClear();
+    mdForget.mockClear();
     // The workspace looks its editor host up by id (the large-file viewer hides it).
     const host = document.createElement("div");
     host.id = "editor";
@@ -67,6 +70,15 @@ describe("Markdown view per tab", () => {
     await ws.flush();
     const meta = sessionSave.mock.calls.at(-1)![0];
     expect(meta.tabs.map((x) => [x.id, x.mdView ?? null])).toEqual([["a", "read"], ["b", "split"], ["t", null]]);
+  });
+
+  it("tells the backend to forget a document (and the consent for its images) when its tab closes", async () => {
+    const file: RestoredTab = { ...tab("f", "f.md", "markdown", "read"), path: "/work/docs/f.md", dirty: false, buffer: null };
+    await ws.restore([tab("a", "a.md", "markdown", null), file], "a");
+    expect(mdForget).not.toHaveBeenCalled();
+    expect(await ws.close("f")).toBe(true);
+    expect(mdForget.mock.calls).toEqual([["/work/docs/f.md"]]);
+    expect(ws.docs.map((d) => d.id)).toEqual(["a"]);
   });
 
   it("does nothing when the view does not change", async () => {

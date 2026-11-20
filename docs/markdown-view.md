@@ -25,7 +25,7 @@ A Markdown file can contain HTML, and a README downloaded from somewhere is not 
 - **HTML is sanitised** with DOMPurify before it is shown. Scripts, event handlers (`onerror`, `onclick`, …), frames, objects, forms, media elements, SVG, MathML, `<style>` and `style` attributes, `<base>`, `<meta>` and `<link>` are removed. Class names are limited to the few the renderer writes, so the file cannot borrow the app's styles, and the pane contains its content (`contain: layout paint`). `id` and `name` get a `user-content-` prefix.
 - **Remote images are not loaded** until you click **Show images** in the bar above the document and confirm in the dialog that follows. The dialog is shown by the app itself (not by the page), and the yes is kept for that document only, until the app quits. The app then downloads the images itself:
   - `https` only, also after redirects (at most 5), without user names in the URL;
-  - public addresses only: every name is resolved by the app and addresses on this computer or the local network (loopback, private, link-local, shared/CGNAT, multicast, reserved, and the IPv6 equivalents including IPv4-mapped, NAT64 and 6to4) are dropped before connecting, so a name that points inward, or switches to an inward address, gets no request; the same check runs for every redirect;
+  - public addresses only: every name is resolved by the app and addresses on this computer or the local network (loopback, private, link-local, shared/CGNAT, multicast, reserved, and the IPv6 equivalents including IPv4-mapped, NAT64 and 6to4) are dropped before connecting, so a name that points inward, or switches to an inward address, gets no request; the same check runs for every redirect. (NAT64 and 6to4 addresses are refused as a whole, so on an IPv6-only network that reaches IPv4 hosts through DNS64, images on IPv4-only hosts do not load.)
   - no proxy (a proxy would resolve names itself), no cookies, no `Referer`, a generic `User-Agent`;
   - image content types only, at most 16 MB each (also when the server sends no length), 20 seconds per image.
 - **Local images** next to the document are shown, but only files inside the document's folder or below it. Paths that climb out (`../../secret.png`), absolute paths, drive letters and symbolic links or junctions that point outside are refused. Only documents that the app itself opened or saved can load images; unsaved documents show none.
@@ -37,7 +37,7 @@ The policy of the app is unchanged (`img-src 'self' data:`, no remote connection
 
 ### Backend commands
 
-The view uses four commands. Each takes the path of the document, and the backend refuses any path it did not open or save itself, so the page cannot point them at another folder:
+The view uses four commands. Each takes the path of the document, and the backend refuses any path it did not open or save itself (and forgets it when the tab is closed):
 
 | Command | What it does | Guard |
 |---|---|---|
@@ -46,4 +46,8 @@ The view uses four commands. Each takes the path of the document, and the backen
 | `md_remote_image` | Downloads a remote image | Known document **and** a yes in that dialog; the download rules above |
 | `open_external` | Opens a link in the system browser or mail program | Known document; `http`, `https`, `mailto` without attachments |
 
-These give the webview a way to reach the network and other programs that the content security policy alone did not allow before. The guards above are what limits it: a script running in the page (which the sanitiser and the policy are there to prevent) could open web links in the browser for an open document, but could not download anything without the user's yes in the app's dialog.
+These give the webview a way to reach the network and other programs that the content security policy alone did not allow before. What limits it:
+
+- The "known document" check keeps the view to the documents that are open. It is a consistency check, not a security boundary: a script running in the page (which the sanitiser and the policy are there to prevent) could first open any existing file with the editor's normal open command, which reads any file anyway, and so make it known.
+- The real boundary for the network is the app's own dialog, which the page cannot answer. Nothing is downloaded without the user's yes for that document. After a yes, a script in the page could use that document to download any public `https` URL, until the tab is closed or the app quits; closing the tab drops the yes and the document's known state.
+- Such a script could also open web links in the browser for an open document.

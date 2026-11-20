@@ -767,6 +767,12 @@ async fn md_remote_image(
     mdfetch::Fetcher::shared()?.fetch(&url).await
 }
 
+/// A tab with this document was closed: forget the document and the user's yes for its images.
+#[tauri::command]
+fn md_forget(gate: State<'_, DocGate>, doc_path: String) {
+    gate.forget(Path::new(&doc_path));
+}
+
 /// Opens a link of an open document in the system's default program (browser or mail). Only
 /// `http`, `https` and `mailto` (without attachments) are accepted.
 #[tauri::command]
@@ -1189,6 +1195,7 @@ pub fn run() {
             install_update,
             md_local_image,
             md_allow_remote,
+            md_forget,
             md_remote_image,
             open_external,
         ])

@@ -86,9 +86,10 @@ sizes), large-file handling, linear-time regex, and update signature checking ov
 
 - **Markdown view (after 0.3.1).** Four backend commands give the webview limited access to local images, remote
   images and the system browser: `md_local_image`, `md_allow_remote`, `md_remote_image` and `open_external`. Every one
-  is checked in the backend against documents the backend itself opened or saved; remote downloads also need the
-  user's yes in a dialog the backend shows, and are limited to public `https` addresses (checked after name
-  resolution). See [markdown-view.md](markdown-view.md). The statement above ("no … HTTP or opener access from the
+  is checked in the backend against documents the backend itself opened or saved (a consistency check: a script in
+  the page could open a file first to make it known). The boundary for the network is the user's yes in a dialog
+  the backend shows: without it nothing is downloaded, and downloads are limited to public `https` addresses (checked
+  after name resolution). The yes lasts until the tab is closed or the app quits. See [markdown-view.md](markdown-view.md). The statement above ("no … HTTP or opener access from the
   webview") holds for the capabilities and plugins; these commands are the exception, with the guards described there.
 
 ## Accepted and open items

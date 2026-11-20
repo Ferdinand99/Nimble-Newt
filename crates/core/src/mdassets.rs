@@ -29,9 +29,10 @@ const NOT_LOCAL: &str = "images from this computer or the local network are not 
 
 // ---- which documents may load what ------------------------------------------------------------------
 
-/// Documents the backend has opened or saved (so the page cannot name any folder it likes), and the
-/// ones whose remote images the user allowed in the backend's own dialog. Kept in memory only: the
-/// consent is asked again after a restart.
+/// Documents the backend has opened or saved, and the ones whose remote images the user allowed in
+/// the backend's own dialog. Kept in memory only, and dropped when the tab closes: the consent is asked
+/// again after a restart or when the document is opened again. Knowing a document is a consistency
+/// check (a script in the page could open a file first); the dialog is the boundary.
 #[derive(Default)]
 pub struct DocGate {
     inner: Mutex<GateInner>,
@@ -47,6 +48,13 @@ impl DocGate {
     /// Called when the backend opens or saves a file for the editor.
     pub fn register(&self, path: &Path) {
         self.inner.lock().unwrap().known.insert(path.to_path_buf());
+    }
+
+    /// Called when a tab closes: the document is no longer known, and its consent is gone.
+    pub fn forget(&self, path: &Path) {
+        let mut g = self.inner.lock().unwrap();
+        g.known.remove(path);
+        g.remote.remove(path);
     }
 
     pub fn is_known(&self, path: &Path) -> bool {
@@ -597,6 +605,26 @@ mod tests {
         let other = Path::new("/work/docs/other.md");
         gate.register(other);
         assert!(gate.check_remote(other).is_err());
+    }
+
+    #[test]
+    fn closing_a_tab_drops_the_document_and_its_consent() {
+        let gate = DocGate::default();
+        let doc = Path::new("/work/docs/readme.md");
+        let other = Path::new("/work/docs/other.md");
+        gate.register(doc);
+        gate.register(other);
+        gate.allow_remote(doc).unwrap();
+        gate.allow_remote(other).unwrap();
+        gate.forget(doc);
+        assert!(gate.check_known(doc).is_err());
+        assert!(gate.check_remote(doc).is_err());
+        // Opening it again does not bring the old yes back.
+        gate.register(doc);
+        assert!(gate.check_known(doc).is_ok());
+        assert!(gate.check_remote(doc).is_err());
+        // Other documents are not touched.
+        assert!(gate.check_remote(other).is_ok());
     }
 
     #[test]

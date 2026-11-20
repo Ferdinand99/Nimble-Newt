@@ -17,15 +17,17 @@ use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+/// How downloads behave. The app only uses [`Policy::app`]; the other settings exist for the tests,
+/// which set the private fields directly.
 pub struct Policy {
     /// `https` in the app; the tests talk plain `http` to a server on this computer.
-    pub scheme: &'static str,
-    pub timeout: Duration,
-    pub max_bytes: u64,
+    scheme: &'static str,
+    timeout: Duration,
+    max_bytes: u64,
     /// Tests only: let names resolve to this computer (never to the local network).
-    pub allow_loopback: bool,
+    allow_loopback: bool,
     /// Tests only: fixed answers for names, instead of the system resolver.
-    pub hosts: HashMap<String, Vec<IpAddr>>,
+    hosts: HashMap<String, Vec<IpAddr>>,
 }
 
 impl Policy {
