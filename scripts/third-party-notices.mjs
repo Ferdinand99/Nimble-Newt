@@ -213,14 +213,27 @@ export function webview2Section(extra, reports, readLicense = (file) => readFile
 /**
  * The production npm packages of a package-lock.json, with licence files read from node_modules.
  * Throws for a licence that is not allowed and for a package without a licence text.
+ *
+ * `notShipped` (`npmNotShipped` in notices-extra.json) names production packages that the app does not
+ * bundle, such as a dependency used only by another package's command-line tool. Each entry needs the
+ * exact name and version and a reason; an entry that matches no package in the lock is an error.
  */
-export function npmEntries(lock, accepted, projectRoot) {
+export function npmEntries(lock, accepted, projectRoot, notShipped = []) {
   const entries = [];
   const problems = [];
+  const skip = new Map();
+  for (const n of notShipped) {
+    if (!n.name || !n.version || !n.reason) problems.push(`npmNotShipped entry ${JSON.stringify(n)} needs a name, a version and a reason`);
+    else skip.set(`${n.name} ${n.version}`, false);
+  }
   for (const [path, info] of Object.entries(lock.packages ?? {})) {
     if (!path.startsWith("node_modules/") || info.dev || info.devOptional) continue;
     const name = path.slice(path.lastIndexOf("node_modules/") + "node_modules/".length);
     const label = `${name} ${info.version}`;
+    if (skip.has(label)) {
+      skip.set(label, true);
+      continue;
+    }
     const expression = info.license ?? "";
     if (!licenseAllowed(expression, accepted)) {
       problems.push(`${label} has the licence "${expression || "(none)"}", which is not on the allowlist in about.toml`);
@@ -243,6 +256,7 @@ export function npmEntries(lock, accepted, projectRoot) {
       });
     }
   }
+  for (const [label, used] of skip) if (!used) problems.push(`npmNotShipped: ${label} is not in package-lock.json any more; remove the entry`);
   if (problems.length > 0) throw new Error(problems.join("\n"));
   return entries;
 }
@@ -390,7 +404,7 @@ function main() {
     product: extra.product,
     intro: extra.intro,
     rust: rustEntries(reports, extra),
-    npm: lockText ? npmEntries(JSON.parse(lockText), accepted, root) : [],
+    npm: lockText ? npmEntries(JSON.parse(lockText), accepted, root, extra.npmNotShipped ?? []) : [],
     webview2: extra.webview2 ? webview2Section(extra, reports) : null,
     vendored: vendoredSections(extra, optional("Cargo.lock") ?? ""),
     fontLicense,

@@ -42,6 +42,8 @@ export interface TabMeta {
   scrollLeft: number;
   savedMtimeMs: number | null;
   bookmarks?: number[];
+  /** Markdown view of the tab ("split" or "read"); missing or null means "edit". */
+  mdView?: string | null;
 }
 export interface SessionMeta {
   tabs: TabMeta[];
@@ -256,6 +258,12 @@ export const api = {
   extStorageGet: (id: string, key: string) => invoke<unknown>("ext_storage_get", { id, key }),
   extStorageSet: (id: string, key: string, value: string) => invoke<void>("ext_storage_set", { id, key, value }),
   extStorageRemove: (id: string, key: string) => invoke<void>("ext_storage_remove", { id, key }),
+  /** A local image of a Markdown document as a data: URL; only files inside the document's folder. */
+  mdLocalImage: (docPath: string, src: string) => invoke<string>("md_local_image", { docPath, src }),
+  /** A remote https image as a data: URL (only after the user allowed images for the document). */
+  mdRemoteImage: (url: string) => invoke<string>("md_remote_image", { url }),
+  /** Opens an http, https or mailto link in the system's default program. */
+  openExternal: (url: string) => invoke<void>("open_external", { url }),
   setLocale: (locale: string) => invoke<void>("set_locale", { locale }),
   appReady: (stages: Record<string, number>) => invoke<boolean>("app_ready", { frontendMs: performance.now(), stages }),
   selftestDone: (ok: boolean, message: string) => invoke<void>("selftest_done", { ok, message }),

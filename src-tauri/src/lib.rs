@@ -661,6 +661,80 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> 
     tauri::async_runtime::spawn_blocking(f).await.map_err(err)
 }
 
+// ---- Markdown view: images and links ------------------------------------------------------------
+
+/// A local image of a Markdown document, as a `data:` URL. Only image files inside the document's
+/// folder are read (see `nimble_core::mdassets::resolve_local_image`).
+#[tauri::command]
+async fn md_local_image(doc_path: String, src: String) -> CmdResult<String> {
+    blocking(move || nimble_core::mdassets::read_local_image(Path::new(&doc_path), &src))
+        .await?
+        .map_err(err)
+}
+
+/// A remote image of a Markdown document, as a `data:` URL. The view asks for it only after the user
+/// chose "Show images" for that document. Public `https` hosts only (redirects included), an image
+/// content type, and at most `MAX_IMAGE_BYTES`.
+#[tauri::command]
+async fn md_remote_image(url: String) -> CmdResult<String> {
+    use nimble_core::mdassets::{self, MAX_IMAGE_BYTES};
+    use reqwest::header::{ACCEPT, CONTENT_TYPE};
+    let url = mdassets::check_remote_image_url(&url).map_err(err)?;
+    // reqwest is built without a crypto provider (as for the updater): use ring, like the updater does.
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
+    let client = reqwest::Client::builder()
+        .user_agent(concat!("NimbleNewt/", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 5 {
+                attempt.error("too many redirects")
+            } else if mdassets::check_remote_image_url(attempt.url().as_str()).is_err() {
+                attempt.error("redirect to an address that is not allowed")
+            } else {
+                attempt.follow()
+            }
+        }))
+        .build()
+        .map_err(err)?;
+    let mut resp = client
+        .get(url.as_str())
+        .header(ACCEPT, "image/*")
+        .send()
+        .await
+        .map_err(err)?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    let content_type = resp
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let mime = mdassets::image_mime_from_content_type(content_type)
+        .ok_or_else(|| "the address did not return an image".to_string())?;
+    if resp.content_length().is_some_and(|n| n > MAX_IMAGE_BYTES) {
+        return Err("image is too large".into());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(err)? {
+        if (bytes.len() + chunk.len()) as u64 > MAX_IMAGE_BYTES {
+            return Err("image is too large".into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(mdassets::data_url(mime, &bytes))
+}
+
+/// Opens a link from the Markdown view in the system's default handler (browser or mail program).
+/// Only `http`, `https` and `mailto` are accepted.
+#[tauri::command]
+fn open_external(url: String) -> CmdResult<()> {
+    let url = nimble_core::mdassets::check_external_url(&url).map_err(err)?;
+    open::that_detached(url).map_err(err)
+}
+
 #[tauri::command]
 async fn ext_list(
     store: State<'_, nimble_core::extensions::ExtensionStore>,
@@ -1068,6 +1142,9 @@ pub fn run() {
             restart_app,
             check_update,
             install_update,
+            md_local_image,
+            md_remote_image,
+            open_external,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Nimble Newt");

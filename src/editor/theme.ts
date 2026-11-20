@@ -2,7 +2,7 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 
 // Colours are CSS variables (see --syn-* in style.css) so the editor follows light/dark and contrast settings.
-const style = HighlightStyle.define([
+export const highlightStyle = HighlightStyle.define([
   { tag: [t.keyword, t.modifier, t.operatorKeyword, t.controlKeyword, t.definitionKeyword, t.moduleKeyword], color: "var(--syn-keyword)" },
   { tag: [t.string, t.special(t.string), t.regexp, t.character], color: "var(--syn-string)" },
   { tag: [t.number, t.bool, t.null, t.atom, t.unit], color: "var(--syn-number)" },
@@ -22,4 +22,4 @@ const style = HighlightStyle.define([
   { tag: t.deleted, color: "var(--syn-tag)" },
 ]);
 
-export const highlighting = syntaxHighlighting(style);
+export const highlighting = syntaxHighlighting(highlightStyle);

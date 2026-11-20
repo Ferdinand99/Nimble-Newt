@@ -1,0 +1,262 @@
+/* Markdown view: Split (editor and rendered document side by side) and Read (rendered document only). */
+
+.editor-col.md-split {
+  display: flex;
+}
+.editor-col.md-split > #editor {
+  flex: 0 0 50%;
+  min-width: 0;
+  min-height: 0;
+}
+.editor-col.md-split > .md-preview {
+  flex: 1 1 0;
+  min-width: 0;
+  border-inline-start: 1px solid var(--line);
+}
+/* The editor keeps its size and scroll position underneath, so leaving Read is instant. */
+.editor-col.md-read > #editor {
+  visibility: hidden;
+}
+.editor-col.md-read > .md-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.md-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+  /* Nothing inside can draw outside the pane, positioned or not. */
+  contain: layout paint;
+  overflow: hidden;
+}
+.md-preview[hidden],
+.md-bar[hidden] {
+  display: none;
+}
+
+.md-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-2);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.md-bar-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.md-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px max(24px, calc((100% - 860px) / 2)) 48px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: calc(var(--editor-size, 14px) + 1px);
+  line-height: 1.6;
+  overflow-wrap: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.md-body:focus {
+  outline: none;
+}
+.md-body:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--brand-ring);
+}
+
+/* The document is rendered in chunks (only changed chunks are replaced while typing); they add no boxes. */
+.md-chunk {
+  display: contents;
+}
+.md-body > .md-chunk:first-child > :first-child {
+  margin-top: 0;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4,
+.md-body h5,
+.md-body h6 {
+  margin: 1.5em 0 0.6em;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.md-body h1 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--line);
+  font-size: 1.9em;
+}
+.md-body h2 {
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--line);
+  font-size: 1.45em;
+}
+.md-body h3 {
+  font-size: 1.2em;
+}
+.md-body h4 {
+  font-size: 1em;
+}
+.md-body h5,
+.md-body h6 {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+.md-body p,
+.md-body ul,
+.md-body ol,
+.md-body blockquote,
+.md-body pre,
+.md-body table,
+.md-body details {
+  margin: 0 0 1em;
+}
+.md-body ul,
+.md-body ol {
+  padding-inline-start: 2em;
+}
+.md-body li + li {
+  margin-top: 0.25em;
+}
+.md-body li > ul,
+.md-body li > ol {
+  margin-bottom: 0;
+}
+.md-body .contains-task-list {
+  padding-inline-start: 1.4em;
+}
+.md-body .task-list-item {
+  list-style: none;
+}
+.md-body .task-list-item-checkbox {
+  margin: 0 0.45em 0.2em -1.4em;
+  vertical-align: middle;
+  accent-color: var(--brand);
+}
+.md-body a {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.md-body a.md-link-blocked {
+  color: var(--muted);
+  text-decoration-style: dotted;
+  cursor: not-allowed;
+}
+.md-body blockquote {
+  padding: 0 1em;
+  border-inline-start: 3px solid var(--fill-2);
+  color: var(--muted);
+}
+.md-body hr {
+  height: 1px;
+  margin: 1.5em 0;
+  border: 0;
+  background: var(--line);
+}
+.md-body code {
+  padding: 0.15em 0.35em;
+  border-radius: var(--r-xs);
+  background: var(--fill);
+  font-family: var(--editor-font);
+  font-size: 0.88em;
+}
+.md-body pre {
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  line-height: 1.5;
+}
+.md-body pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 0.86em;
+  white-space: pre;
+}
+.md-body table {
+  display: block;
+  max-width: 100%;
+  overflow: auto;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.md-body th,
+.md-body td {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+}
+.md-body th {
+  background: var(--bg-2);
+  font-weight: 600;
+}
+.md-body img {
+  max-width: 100%;
+  height: auto;
+}
+/* Images that are not shown (remote and not allowed yet, missing, refused): their alt text in a frame. */
+.md-body img.md-img-placeholder,
+.md-body img.md-img-loading {
+  display: inline-block;
+  min-width: 2.5em;
+  min-height: 1.6em;
+  padding: 2px 8px;
+  border: 1px dashed var(--fill-2);
+  border-radius: var(--r-xs);
+  color: var(--muted);
+  font-size: 0.85em;
+  vertical-align: middle;
+}
+.md-body kbd {
+  font-size: 0.8em;
+}
+.md-body summary {
+  cursor: pointer;
+}
+.md-error {
+  color: var(--bad-text);
+}
+
+/* The Edit | Split | Read switch in the status bar: a small segmented control. */
+.segmented.status-seg {
+  padding: 1px;
+  border-radius: var(--r-xs);
+  margin-inline: 4px;
+}
+.segmented.status-seg[hidden] {
+  display: none;
+}
+.segmented.status-seg > button {
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 5px;
+  color: inherit;
+  font-size: 0.6875rem;
+}
+.segmented.status-seg > button[aria-pressed="true"] {
+  color: var(--text);
+}
+
+@media (forced-colors: active) {
+  .segmented.status-seg > button[aria-pressed="true"] {
+    outline: 1px solid CanvasText;
+  }
+  .md-body pre,
+  .md-body th,
+  .md-body td {
+    border-color: CanvasText;
+  }
+}

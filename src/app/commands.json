@@ -522,6 +522,19 @@
   },
   {
    "id": "app.extensions"
+  },
+  {
+   "id": "markdown.toggleRead",
+   "accel": "CmdOrCtrl+Shift+V",
+   "when": "markdown"
+  },
+  {
+   "id": "markdown.toggleSplit",
+   "chord": "CmdOrCtrl+K V",
+   "when": "markdown"
+  },
+  {
+   "id": "markdown.edit"
   }
  ],
  "menu": [

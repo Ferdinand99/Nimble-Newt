@@ -12,6 +12,7 @@ import { detectFromShebang, detectLanguage, getLanguage, type LanguageDef } from
 import { basename, detectIndent, nextUntitledName, pushRecent, type Indent } from "../lib/logic";
 import { expectedMtime, isConflict } from "../lib/saveConflict";
 import { isLossy, lossyPlan, type LossyChoice } from "../lib/saveLossy";
+import { parseMdView, type MdView } from "../lib/mdView";
 import { settings } from "../lib/settings";
 import { confirmSheet, openSheet } from "../ui/dialog";
 import type { LargeViewer } from "../ui/largeView";
@@ -47,9 +48,12 @@ export interface Doc {
   follow: boolean;
   /** Set for files opened in the read-only large-file viewer instead of the editor. */
   large: { opened: LargeOpened; viewer: LargeViewer | null } | null;
+  /** How the tab is shown when it is Markdown: editor only, editor and rendered view, or rendered view only. */
+  mdView: MdView;
 }
 
-export type ChangeKind = "tabs" | "active" | "doc" | "selection" | "settings";
+/** "view": the Markdown view (edit / split / read) of the active tab changed. */
+export type ChangeKind = "tabs" | "active" | "doc" | "selection" | "settings" | "view";
 type Listener = (kind: ChangeKind) => void;
 
 const newId = () => (crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(16).slice(2)}`).replace(/[^a-zA-Z0-9-]/g, "");
@@ -80,6 +84,8 @@ export class Workspace {
   private followTimer: number | undefined;
   private following = false;
   private lastSelectionPersist = 0;
+  /** Where focus goes instead of the editor, e.g. the rendered view of a Markdown tab in read view. */
+  focusTarget: (() => HTMLElement | null) | null = null;
 
   readonly persist = debounce(() => void this.persistNow(), 500);
   /** Re-guesses the language of an untitled tab shortly after typing or pasting stops. */
@@ -248,6 +254,7 @@ export class Workspace {
       bookmarks: p.bookmarks ?? [],
       follow: false,
       large: null,
+      mdView: p.mdView ?? "edit",
     };
     if (doc.bookmarks.length) doc.state = state.update({ effects: setBookmarkEffect(doc.bookmarks) }).state;
     return doc;
@@ -556,7 +563,17 @@ export class Workspace {
   }
 
   focus(): void {
-    this.view.focus();
+    const other = this.focusTarget?.();
+    if (other) other.focus();
+    else this.view.focus();
+  }
+
+  /** Switches a Markdown tab between edit, split and read view (remembered per tab and in the session). */
+  setMdView(doc: Doc, view: MdView): void {
+    if (doc.mdView === view) return;
+    doc.mdView = view;
+    if (doc.id === this.activeId) this.emit("view");
+    this.persist();
   }
 
   nextTab(dir: 1 | -1): void {
@@ -925,6 +942,7 @@ export class Workspace {
           scrollLeft: d.scrollLeft,
           savedMtimeMs: d.savedMtime,
           bookmarks: this.stateOf(d) ? bookmarkedLines(this.stateOf(d)!) : d.bookmarks,
+          mdView: d.mdView === "edit" ? null : d.mdView,
         })),
       });
     } catch (e) {
@@ -949,6 +967,7 @@ export class Workspace {
           anchor: m.selectionAnchor, head: m.selectionHead,
           scrollTop: m.scrollTop, scrollLeft: m.scrollLeft, savedMtime: m.savedMtimeMs,
           bookmarks: m.bookmarks ?? [],
+          mdView: parseMdView(m.mdView),
         };
         if (m.buffer !== null) {
           let savedDoc: Text | null = null;

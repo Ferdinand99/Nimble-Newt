@@ -11,6 +11,10 @@ export interface CommandDef {
   editor?: boolean;
   /** Recorded in macros when run from the palette or menu. */
   macro?: boolean;
+  /** A two-step shortcut such as "CmdOrCtrl+K V" (press the first, release, press the second). Webview only. */
+  chord?: string;
+  /** The shortcut only applies in this context; elsewhere the key goes on to the editor as usual. */
+  when?: "markdown";
 }
 
 export const COMMAND_DEFS: CommandDef[] = data.commands as CommandDef[];
@@ -68,3 +72,60 @@ export const MACRO_COMMANDS = new Set(COMMAND_DEFS.filter((c) => c.macro).map((c
 
 /** Commands that ask the user for input: they run while recording but are not recorded (they would prompt on every pass). */
 export const MACRO_NOT_RECORDED = new Set(["lineop.splitAt", "lineop.prefix", "lineop.suffix"]);
+
+/** "CmdOrCtrl+K V" → ["CmdOrCtrl+K", "V"]. */
+export function splitChord(chord: string): [string, string] {
+  const [a, b = ""] = chord.trim().split(/\s+/);
+  return [a, b];
+}
+
+/** The shortcut as shown in the palette and tooltips, chords included ("Ctrl+K V", "⌘K V"). */
+export function shortcutLabel(def: CommandDef, mac: boolean, format: (accel: string, mac: boolean) => string): string | undefined {
+  const a = accelFor(def, mac);
+  if (a) return format(a, mac);
+  if (def.chord) return splitChord(def.chord).map((p) => format(p, mac)).join(" ");
+  return undefined;
+}
+
+const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta", "AltGraph", "CapsLock", "OS"]);
+
+/**
+ * Two-step shortcuts. `handle` is called for every key press: it answers "consume" for the first step
+ * (the key must not reach the editor), the command id for the second, and "pass" for anything else.
+ * A key that does not complete the chord cancels it and is passed on. The second key may be pressed
+ * with or without Ctrl/Cmd still held, as in VS Code.
+ */
+export class ChordMatcher {
+  private pending: { defs: CommandDef[]; at: number } | null = null;
+
+  constructor(
+    private readonly defs: CommandDef[],
+    private readonly mac: boolean,
+    private readonly timeoutMs = 3000,
+  ) {}
+
+  get waiting(): boolean {
+    return this.pending !== null;
+  }
+
+  handle(e: KeyLike, enabled: (def: CommandDef) => boolean, now = Date.now()): "pass" | "consume" | { run: string } {
+    if (MODIFIER_KEYS.has(e.key)) return this.pending ? "consume" : "pass";
+    const p = this.pending;
+    this.pending = null;
+    if (p && now - p.at <= this.timeoutMs) {
+      for (const def of p.defs) {
+        const second = splitChord(def.chord!)[1];
+        if (matchesAccel(e, second, this.mac) || matchesAccel(e, `CmdOrCtrl+${second}`, this.mac)) return { run: def.id };
+      }
+      return "pass";
+    }
+    const started = this.defs.filter((d) => d.chord && enabled(d) && matchesAccel(e, splitChord(d.chord)[0], this.mac));
+    if (!started.length) return "pass";
+    this.pending = { defs: started, at: now };
+    return "consume";
+  }
+
+  cancel(): void {
+    this.pending = null;
+  }
+}

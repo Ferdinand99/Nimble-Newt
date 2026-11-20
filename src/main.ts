@@ -2,12 +2,14 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import "./styles/style.css";
-import { accelFor, COMMAND_DEFS, matchesAccel } from "./app/commandDefs";
+import { accelFor, ChordMatcher, COMMAND_DEFS, matchesAccel, type CommandDef } from "./app/commandDefs";
 import { openPalette, runCommand } from "./app/commands";
 import { loadFolderState } from "./app/folderState";
 import { restoreFolderPanel } from "./app/panels";
 import { onUpdateAvailable, showAvailable, startAutoUpdates } from "./app/updater";
 import { workspace } from "./app/workspace";
+import "./app/markdownView";
+import { isMarkdownDoc } from "./lib/mdView";
 import { api, errorMessage, listEncodings } from "./lib/api";
 import { isMac } from "./lib/dom";
 import { setLocale, t } from "./lib/i18n";
@@ -127,13 +129,23 @@ async function boot(): Promise<void> {
 function wireShortcuts(): void {
   const defs = COMMAND_DEFS.filter((c) => !c.editor).flatMap((c) => {
     const a = accelFor(c, isMac);
-    return a ? [{ id: c.id, accel: a }] : [];
+    return a ? [{ id: c.id, accel: a, def: c }] : [];
   });
+  // A shortcut with a context (`when`) only fires there; elsewhere the key goes on as usual.
+  const enabled = (c: CommandDef) => c.when !== "markdown" || isMarkdownDoc(workspace.active);
+  const chords = new ChordMatcher(COMMAND_DEFS.filter((c) => c.chord), isMac);
   // Capture phase so shortcuts also work while an input has focus, except plain text-editing keys.
   document.addEventListener("keydown", (e) => {
-    if (document.querySelector("dialog[open]")) return;
+    if (document.querySelector("dialog[open]")) return chords.cancel();
+    const chord = chords.handle(e, enabled);
+    if (chord !== "pass") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (chord !== "consume") runCommand(chord.run);
+      return;
+    }
     for (const d of defs) {
-      if (matchesAccel(e, d.accel, isMac)) {
+      if (matchesAccel(e, d.accel, isMac) && enabled(d.def)) {
         e.preventDefault();
         runCommand(d.id);
         return;

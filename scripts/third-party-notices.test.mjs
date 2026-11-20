@@ -289,6 +289,26 @@ describe("npmEntries", () => {
       /a 1.0.0 has the licence "GPL-3.0-only"/,
     );
   });
+  it("leaves out packages listed as not shipped, and fails on a stale or incomplete entry", () => {
+    const dir = folder({ "node_modules/a/LICENSE": "A licence" });
+    const packages = lock({
+      "node_modules/a": { version: "1.0.0", license: "MIT" },
+      "node_modules/cli-only": { version: "3.0.4", license: "PSF-2.0" },
+    });
+    const entries = npmEntries(packages, accepted, dir, [{ name: "cli-only", version: "3.0.4", reason: "only the CLI imports it" }]);
+    expect(entries.map((e) => e.packages[0].label)).toEqual(["a 1.0.0"]);
+    expect(() => npmEntries(packages, accepted, dir, [{ name: "cli-only", version: "3.0.3", reason: "x" }])).toThrow(/has the licence "PSF-2.0"[\s\S]*cli-only 3.0.3 is not in package-lock.json/);
+    expect(() => npmEntries(packages, accepted, dir, [{ name: "cli-only", version: "3.0.4" }])).toThrow(/needs a name, a version and a reason/);
+  });
+  it("lists only packages that the app does not import", () => {
+    // argparse comes with markdown-it, but only its command-line tool uses it; the library the app imports does not.
+    const extra = JSON.parse(readFileSync(new URL("../notices-extra.json", import.meta.url), "utf8"));
+    expect(extra.npmNotShipped.map((n) => n.name)).toEqual(["argparse"]);
+    const pkg = JSON.parse(readFileSync(new URL("../node_modules/markdown-it/package.json", import.meta.url), "utf8"));
+    const entry = readFileSync(new URL(`../node_modules/markdown-it/${pkg.exports["."].import.default}`, import.meta.url), "utf8");
+    expect(entry).not.toMatch(/argparse/);
+    expect(readFileSync(new URL("../node_modules/markdown-it/bin/markdown-it.mjs", import.meta.url), "utf8")).toMatch(/argparse/);
+  });
   it("fails for a package with no licence file", () => {
     const dir = folder({ "node_modules/a/package.json": "{}" });
     expect(() => npmEntries(lock({ "node_modules/a": { version: "1.0.0", license: "MIT" } }), accepted, dir)).toThrow(/no licence file/);

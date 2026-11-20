@@ -1,4 +1,4 @@
-# End-to-end check of the extension sandbox
+# End-to-end checks: the extension sandbox and the Markdown view
 
 `sandbox.spec.ts` loads the real sandbox document (the output of `sandboxDocument` in `src/ext/document.ts`, which is
 what the app stages) in a sandboxed iframe with an opaque origin, served with the real CSP header (read from
@@ -8,6 +8,14 @@ and must stay empty. A control run with a looser policy must reach the sink, so 
 
 It does not run the app itself, so the `nnext` scheme in the real webviews is not covered. For that, install
 `examples/nn02-check` in the app on macOS and Windows (see its README).
+
+## The Markdown view
+
+`markdown.spec.ts` builds the real front end with Vite and serves it with the app's content security policy (read from
+`src-tauri/tauri.conf.json`), with a small stand-in for the Tauri backend that serves a few files and records every call.
+It checks the Edit, Split and Read views, the status bar switch, the shortcuts, the view each tab remembers (and the
+session), that a 1 MB document stays responsive in Split, and the safety rules: no script or event handler runs, remote
+images are not requested before "Show images", local images go through the backend, and links never navigate the window.
 
 ## Run it
 

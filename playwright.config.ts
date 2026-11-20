@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-// The end-to-end check of the extension sandbox (e2e/). Chromium and WebKit are the engines behind WebView2 and WKWebView.
+// The end-to-end checks (e2e/): the extension sandbox and the Markdown view. Chromium and WebKit are the engines behind WebView2 and WKWebView.
 export default defineConfig({
   testDir: "e2e",
   testMatch: "*.spec.ts",

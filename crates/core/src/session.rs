@@ -27,6 +27,10 @@ pub struct TabMeta {
     /// 1-based numbers of bookmarked lines. Added after the first release: older sessions lack it.
     #[serde(default)]
     pub bookmarks: Vec<u32>,
+    /// How a Markdown tab is shown: "edit", "split" or "read". Added in 0.4: older sessions lack it,
+    /// and the frontend treats anything it does not know as "edit".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub md_view: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -287,6 +291,23 @@ mod tests {
         assert_eq!(r.tabs.len(), 1);
         assert_eq!(r.tabs[0].meta.selection_head, 4);
         assert!(r.tabs[0].meta.bookmarks.is_empty());
+        assert_eq!(r.tabs[0].meta.md_view, None);
+    }
+
+    #[test]
+    fn markdown_view_round_trips_as_md_view() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = SessionStore::new(dir.path()).unwrap();
+        let mut t = tab("a", Some("/p/readme.md"), false);
+        t.md_view = Some("read".into());
+        s.write_meta(&SessionMeta {
+            tabs: vec![t.clone()],
+            active: Some("a".into()),
+        })
+        .unwrap();
+        let raw = std::fs::read_to_string(dir.path().join("session.json")).unwrap();
+        assert!(raw.contains("\"mdView\": \"read\""), "{raw}");
+        assert_eq!(s.load().tabs[0].meta, t);
     }
 
     #[test]
