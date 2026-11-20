@@ -28,6 +28,8 @@ export const compartments = {
   indent: new Compartment(),
   minimap: new Compartment(),
   completion: new Compartment(),
+  /** Read-only while a Markdown tab shows only its rendered view (the editor is hidden then). */
+  readOnly: new Compartment(),
 };
 
 /** Set once the minimap module has loaded; until then the minimap slot stays empty. */
@@ -117,7 +119,13 @@ export function dynamicExtensions(o: ViewOptions, lang: Extension = []): Extensi
     compartments.indent.of(indentExtension(o.indent)),
     compartments.completion.of(o.completion && completionExtension ? completionExtension : []),
     compartments.minimap.of(o.minimap && minimapExtension ? minimapExtension : []),
+    compartments.readOnly.of([]),
   ];
+}
+
+/** Makes an editor read-only (not editable, no commands that change the text) or editable again. */
+export function readOnlyEffect(on: boolean) {
+  return compartments.readOnly.reconfigure(on ? [EditorView.editable.of(false), EditorState.readOnly.of(true)] : []);
 }
 
 /** The full extension set for a secondary editor (comparison panes). */

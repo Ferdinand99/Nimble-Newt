@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   acceptedLicenses,
@@ -288,6 +289,41 @@ describe("npmEntries", () => {
     expect(() => npmEntries(lock({ "node_modules/a": { version: "1.0.0", license: "GPL-3.0-only" } }), accepted, dir)).toThrow(
       /a 1.0.0 has the licence "GPL-3.0-only"/,
     );
+  });
+  it("leaves out packages listed as not shipped, and fails on a stale or incomplete entry", () => {
+    const dir = folder({ "node_modules/a/LICENSE": "A licence" });
+    const packages = lock({
+      "node_modules/a": { version: "1.0.0", license: "MIT" },
+      "node_modules/cli-only": { version: "3.0.4", license: "PSF-2.0" },
+    });
+    const entries = npmEntries(packages, accepted, dir, [{ name: "cli-only", version: "3.0.4", reason: "only the CLI imports it" }]);
+    expect(entries.map((e) => e.packages[0].label)).toEqual(["a 1.0.0"]);
+    expect(() => npmEntries(packages, accepted, dir, [{ name: "cli-only", version: "3.0.3", reason: "x" }])).toThrow(/has the licence "PSF-2.0"[\s\S]*cli-only 3.0.3 is not in package-lock.json/);
+    expect(() => npmEntries(packages, accepted, dir, [{ name: "cli-only", version: "3.0.4" }])).toThrow(/needs a name, a version and a reason/);
+  });
+  it("lists only packages that the app does not import", () => {
+    // argparse comes with markdown-it, but only its command-line tool uses it; the library the app imports does not.
+    const extra = JSON.parse(readFileSync(new URL("../notices-extra.json", import.meta.url), "utf8"));
+    expect(extra.npmNotShipped.map((n) => n.name)).toEqual(["argparse"]);
+    const modules = fileURLToPath(new URL("../node_modules/", import.meta.url));
+    const pkg = JSON.parse(readFileSync(join(modules, "markdown-it/package.json"), "utf8"));
+    // Every script of markdown-it except its command-line tool, and of the packages it depends on.
+    const roots = [join(modules, "markdown-it"), ...Object.keys(pkg.dependencies).filter((d) => d !== "argparse").map((d) => join(modules, d))];
+    const scripts = [];
+    const walk = (dir) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) {
+          if (e.name !== "bin" && e.name !== "node_modules") walk(p);
+        } else if (/\.(c|m)?js$/.test(e.name)) scripts.push(p);
+      }
+    };
+    roots.forEach(walk);
+    expect(scripts.length).toBeGreaterThan(10);
+    const importsArgparse = /(from\s*|require\(\s*|import\(\s*)["']argparse["']/;
+    expect(scripts.filter((f) => importsArgparse.test(readFileSync(f, "utf8")))).toEqual([]);
+    // The check would see it: the command-line tool does import it.
+    expect(readFileSync(join(modules, "markdown-it/bin/markdown-it.mjs"), "utf8")).toMatch(importsArgparse);
   });
   it("fails for a package with no licence file", () => {
     const dir = folder({ "node_modules/a/package.json": "{}" });

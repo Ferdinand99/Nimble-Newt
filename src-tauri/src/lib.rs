@@ -1,12 +1,14 @@
 //! Tauri shell around `nimble-core`: commands, native menu, file associations,
 //! single-instance forwarding and the updater.
 
+mod mdfetch;
 mod menu;
 mod sandbox;
 
 use nimble_core::encoding::TextEncoding;
 use nimble_core::eol::Eol;
 use nimble_core::fileio::{self, OpenedFile, WriteResult};
+use nimble_core::mdassets::DocGate;
 use nimble_core::search::{self, ReplaceReport, SearchOptions, SearchReport};
 use nimble_core::session::{RestoredSession, SessionMeta, SessionStore};
 use nimble_core::update::{self, UpdateErrorKind};
@@ -63,17 +65,32 @@ fn err<E: std::fmt::Display>(e: E) -> String {
 // ---- files ---------------------------------------------------------------
 
 #[tauri::command]
-async fn open_file(path: String, default_eol: Eol) -> CmdResult<OpenedFile> {
-    fileio::read(Path::new(&path), default_eol).map_err(err)
+async fn open_file(
+    gate: State<'_, DocGate>,
+    path: String,
+    default_eol: Eol,
+) -> CmdResult<OpenedFile> {
+    let f = fileio::read(Path::new(&path), default_eol).map_err(err)?;
+    register_doc(&gate, &path, &f.path);
+    Ok(f)
+}
+
+/// Remembers a file the editor opened or saved, so the Markdown view may load its images and links.
+fn register_doc(gate: &DocGate, requested: &str, actual: &str) {
+    gate.register(Path::new(requested));
+    gate.register(Path::new(actual));
 }
 
 #[tauri::command]
 async fn open_file_as(
+    gate: State<'_, DocGate>,
     path: String,
     encoding: TextEncoding,
     default_eol: Eol,
 ) -> CmdResult<OpenedFile> {
-    fileio::read_as(Path::new(&path), encoding, default_eol).map_err(err)
+    let f = fileio::read_as(Path::new(&path), encoding, default_eol).map_err(err)?;
+    register_doc(&gate, &path, &f.path);
+    Ok(f)
 }
 
 #[derive(Serialize)]
@@ -89,6 +106,7 @@ struct SaveFailure {
 /// Unless `allow_lossy`, text the encoding cannot represent is refused (`lossy`) and nothing is written.
 #[tauri::command]
 async fn save_file(
+    gate: State<'_, DocGate>,
     path: String,
     text: String,
     encoding: TextEncoding,
@@ -104,6 +122,7 @@ async fn save_file(
         expected_mtime_ms,
         allow_lossy,
     )
+    .inspect(|_| gate.register(Path::new(&path)))
     .map_err(|e| SaveFailure {
         kind: match e {
             nimble_core::Error::Conflict(_) => "conflict",
@@ -622,6 +641,11 @@ fn take_pending_paths(pending: State<'_, Pending>) -> Vec<String> {
 
 #[tauri::command]
 fn set_locale(app: AppHandle, locale: String) -> CmdResult<()> {
+    app.state::<UiLocale>()
+        .0
+        .lock()
+        .unwrap()
+        .clone_from(&locale);
     let m =
         menu::build(&app, &locale, &app.state::<MenuExtras>().0.lock().unwrap()).map_err(err)?;
     app.set_menu(m).map_err(err)?;
@@ -659,6 +683,105 @@ fn ext_install_path(
 /// Reading, unpacking and validating packages touches the disk, so these commands run off the UI thread.
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> CmdResult<T> {
     tauri::async_runtime::spawn_blocking(f).await.map_err(err)
+}
+
+// ---- Markdown view: images and links ------------------------------------------------------------
+//
+// The page can only ask: the backend decides. Every command takes the path of the document, and the
+// path must be one the backend opened or saved itself (`DocGate`). Remote images additionally need
+// the user's yes in a dialog that the backend shows, so a script in the page cannot give it.
+
+/// The interface language, for the texts of dialogs the backend shows.
+#[derive(Default)]
+struct UiLocale(Mutex<String>);
+
+/// A local image of an open Markdown document, as a `data:` URL. Only image files inside the
+/// document's folder are read (see `nimble_core::mdassets::resolve_local_image`).
+#[tauri::command]
+async fn md_local_image(
+    gate: State<'_, DocGate>,
+    doc_path: String,
+    src: String,
+) -> CmdResult<String> {
+    gate.check_known(Path::new(&doc_path)).map_err(err)?;
+    blocking(move || nimble_core::mdassets::read_local_image(Path::new(&doc_path), &src))
+        .await?
+        .map_err(err)
+}
+
+/// "Show images": asks the user in a native dialog whether the remote images of an open document
+/// may be loaded, and remembers a yes for that document until the app quits.
+#[tauri::command]
+async fn md_allow_remote(
+    app: AppHandle,
+    gate: State<'_, DocGate>,
+    locale: State<'_, UiLocale>,
+    doc_path: String,
+    count: u32,
+) -> CmdResult<bool> {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+    let path = PathBuf::from(&doc_path);
+    gate.check_known(&path).map_err(err)?;
+    if gate.remote_allowed(&path) {
+        return Ok(true);
+    }
+    let lang = locale.0.lock().unwrap().clone();
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let mut dialog = app
+        .dialog()
+        .message(
+            menu::text(&lang, "markdown.consentMessage")
+                .replace("{n}", &count.to_string())
+                .replace("{name}", &name),
+        )
+        .title(menu::text(&lang, "markdown.consentTitle"))
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            menu::text(&lang, "markdown.showImages"),
+            menu::text(&lang, "common.cancel"),
+        ));
+    if let Some(w) = app.get_webview_window("main") {
+        dialog = dialog.parent(&w);
+    }
+    let yes = blocking(move || dialog.blocking_show()).await?;
+    if yes {
+        gate.allow_remote(&path).map_err(err)?;
+    }
+    Ok(yes)
+}
+
+/// A remote image of an open document, as a `data:` URL, once the user allowed remote images for it
+/// (`md_allow_remote`). See `mdfetch` for what the download allows.
+#[tauri::command]
+async fn md_remote_image(
+    gate: State<'_, DocGate>,
+    doc_path: String,
+    url: String,
+) -> CmdResult<String> {
+    let path = PathBuf::from(&doc_path);
+    gate.check_known(&path).map_err(err)?;
+    gate.check_remote(&path).map_err(err)?;
+    mdfetch::Fetcher::shared()?.fetch(&url).await
+}
+
+/// A tab with this document was closed: forget the document and the user's yes for its images.
+#[tauri::command]
+fn md_forget(gate: State<'_, DocGate>, doc_path: String) {
+    gate.forget(Path::new(&doc_path));
+}
+
+/// Opens a link of an open document in the system's default program (browser or mail). Only
+/// `http`, `https` and `mailto` (without attachments) are accepted.
+#[tauri::command]
+async fn open_external(gate: State<'_, DocGate>, doc_path: String, url: String) -> CmdResult<()> {
+    gate.check_known(Path::new(&doc_path)).map_err(err)?;
+    let url = nimble_core::mdassets::check_external_url(&url).map_err(err)?;
+    blocking(move || open::that_detached(url))
+        .await?
+        .map_err(err)
 }
 
 #[tauri::command]
@@ -974,6 +1097,8 @@ pub fn run() {
         .manage(CompareCache::default())
         .manage(LargeFiles::default())
         .manage(MenuExtras::default())
+        .manage(DocGate::default())
+        .manage(UiLocale::default())
         .manage(sandbox::SandboxDocs::default())
         .register_uri_scheme_protocol(sandbox::SCHEME, |ctx, request| {
             ctx.app_handle()
@@ -1068,6 +1193,11 @@ pub fn run() {
             restart_app,
             check_update,
             install_update,
+            md_local_image,
+            md_allow_remote,
+            md_forget,
+            md_remote_image,
+            open_external,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Nimble Newt");

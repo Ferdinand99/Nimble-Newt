@@ -22,6 +22,12 @@ tauri-plugin-updater = "2"
 tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Remote images in the Markdown view are fetched here (the webview's CSP blocks them). Same
+# version, features and TLS stack (rustls with ring) as tauri-plugin-updater, so no new crates.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# Opens links from the Markdown view in the system browser (only http, https and mailto).
+open = "=5.4.5"
 
 [dev-dependencies]
 tempfile = "3"

@@ -35,6 +35,8 @@ Added for the editor:
 | Find bar | `.find` | Mounted by CodeMirror's panel API; toggles for case, whole word and regex use `aria-pressed`. |
 | Find in files | `.fif` | Bottom panel with grouped results, replace preview and per-file checkboxes. |
 | Command palette | `.palette` | Fuzzy-filtered quick-pick, reused for quick open and all pickers. |
+| Markdown view | `.md-preview`, `.md-body`, `.md-bar` | The rendered document of a Markdown tab (Split or Read). Typography from the tokens, code coloured with the editor's `--syn-*` highlighter, tables and quotes drawn with `--line` / `--fill`. `contain: layout paint` keeps anything inside the pane. `.md-bar` is the "Show images" bar. |
+| View switch | `.segmented.status-seg` | A small segmented control in the status bar (Edit, Split, Read), shown only for Markdown tabs. |
 | Editor surface | `.cm-*` overrides | Gutter, active line, selection, bracket matching, search matches and whitespace markers, all token-driven. |
 
 ## Adding UI

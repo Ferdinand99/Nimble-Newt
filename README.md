@@ -42,6 +42,7 @@ Notepad++ simplicity, a clean Apple-inspired design, and a small native app buil
 - **Split view and document map.** Two views of the same file with independent scrolling, an optional minimap, and a **function list / outline** panel (Ctrl/Cmd+Shift+O).
 - **Folder as workspace.** Open a folder to get a file tree and a filename filter (Ctrl/Cmd+Shift+E).
 - **Very large files.** Files above 256 MB open instantly in a read-only viewer that indexes in the background, with search, go to line and **follow** (tail) for growing logs. Smaller files are fully editable.
+- **Markdown view.** Markdown files can be shown three ways: **Edit** (the editor), **Split** (editor and rendered document side by side, updated while you type, scrolling together) and **Read** (the rendered document only). Switch in the status bar, with `Ctrl/Cmd+Shift+V` (Read) and `Ctrl/Cmd+K V` (Split), or from the palette; every tab remembers its view. CommonMark plus GitHub tables, task lists, strikethrough and autolinks, code coloured like in the editor, light and dark theme. Safe by default: HTML in the file is sanitised, remote images load only after you click **Show images** and confirm, and only from public https addresses; local images are read only from the document's folder, and links open in your browser (links to other `.md` files open in a tab). See [docs/markdown-view.md](docs/markdown-view.md).
 - **Tools.** Format and minify JSON / XML, Base64 / URL / HTML / hex encoding, MD5 / SHA checksums for text or files, timestamp conversion and UUIDs, from a tools panel.
 - **Extensions.** Small sandboxed add-ons that contribute commands and text tools, with explicit permissions and no file or network access ([docs/extensions.md](docs/extensions.md)). Three are built in: Word Count, Markdown Helpers and Text Cleaner.
 - **Command palette** (Ctrl/Cmd+Shift+P) with every action, and **quick open** for recent files.
@@ -103,6 +104,8 @@ On macOS `Ctrl` is `⌘` (Command). Editor-level keys (multi-cursor, line operat
 | Add Cursor Above | `Ctrl+Alt+↑` | `⌘⌥↑` |
 | Add Cursor Below | `Ctrl+Alt+↓` | `⌘⌥↓` |
 | Command Palette… | `Ctrl+Shift+P` | `⌘⇧P` |
+| Markdown: Toggle Read View | `Ctrl+Shift+V` | `⌘⇧V` |
+| Markdown: Toggle Split View | `Ctrl+K V` | `⌘K V` |
 | Toggle Word Wrap | `Alt+Z` | `⌥Z` |
 | Zoom In | `Ctrl+=` | `⌘=` |
 | Zoom Out | `Ctrl+-` | `⌘-` |

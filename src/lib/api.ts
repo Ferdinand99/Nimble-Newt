@@ -42,6 +42,8 @@ export interface TabMeta {
   scrollLeft: number;
   savedMtimeMs: number | null;
   bookmarks?: number[];
+  /** Markdown view of the tab ("split" or "read"); missing or null means "edit". */
+  mdView?: string | null;
 }
 export interface SessionMeta {
   tabs: TabMeta[];
@@ -256,6 +258,16 @@ export const api = {
   extStorageGet: (id: string, key: string) => invoke<unknown>("ext_storage_get", { id, key }),
   extStorageSet: (id: string, key: string, value: string) => invoke<void>("ext_storage_set", { id, key, value }),
   extStorageRemove: (id: string, key: string) => invoke<void>("ext_storage_remove", { id, key }),
+  /** A local image of an open Markdown document as a data: URL; only files inside the document's folder. */
+  mdLocalImage: (docPath: string, src: string) => invoke<string>("md_local_image", { docPath, src }),
+  /** Asks the user (in a dialog of the backend) whether the document may load remote images. */
+  mdAllowRemote: (docPath: string, count: number) => invoke<boolean>("md_allow_remote", { docPath, count }),
+  /** A tab was closed: the backend forgets the document and the user's consent for its images. */
+  mdForget: (docPath: string) => invoke<void>("md_forget", { docPath }),
+  /** A remote https image as a data: URL, once the user allowed remote images for the document. */
+  mdRemoteImage: (docPath: string, url: string) => invoke<string>("md_remote_image", { docPath, url }),
+  /** Opens an http, https or mailto link of an open document in the system's default program. */
+  openExternal: (docPath: string, url: string) => invoke<void>("open_external", { docPath, url }),
   setLocale: (locale: string) => invoke<void>("set_locale", { locale }),
   appReady: (stages: Record<string, number>) => invoke<boolean>("app_ready", { frontendMs: performance.now(), stages }),
   selftestDone: (ok: boolean, message: string) => invoke<void>("selftest_done", { ok, message }),

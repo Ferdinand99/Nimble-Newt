@@ -57,6 +57,8 @@ async function rebind(): Promise<void> {
 
 export async function openSplit(orientation: "right" | "below" = "right"): Promise<void> {
   if (!workspace.active || workspace.active.large) return;
+  // A second editor and the Markdown view share the space: opening the split goes back to Edit.
+  if (workspace.active.mdView !== "edit") workspace.setMdView(workspace.active, "edit");
   if (pane) {
     pane.orientation = orientation;
     layoutPane();

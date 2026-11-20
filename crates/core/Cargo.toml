@@ -22,6 +22,8 @@ sha1 = "0.11"
 sha2 = "0.11"
 toml = "1.1"
 memchr = "2"
+base64 = "0.22"
+url = "2"
 zip = { version = "9.0", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]

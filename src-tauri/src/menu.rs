@@ -109,6 +109,11 @@ fn table(locale: &str) -> HashMap<String, String> {
     t
 }
 
+/// A UI string in the given language (English when it has none), for dialogs the backend shows.
+pub fn text(locale: &str, key: &str) -> String {
+    table(locale).remove(key).unwrap_or_else(|| key.to_owned())
+}
+
 /// `menu.<id>` first (menu-specific wording), then the palette title `cmd.<id>`.
 fn label(t: &HashMap<String, String>, id: &str) -> Option<String> {
     t.get(&format!("menu.{id}"))

@@ -20,7 +20,9 @@ import { showMenu } from "../ui/menu";
 import { quickPick } from "../ui/palette";
 import { toast } from "../ui/toast";
 import { extensionCommands, isExtensionCommand } from "../ext/registry";
-import { accelFor, COMMAND_DEFS, MACRO_COMMANDS, MACRO_NOT_RECORDED } from "./commandDefs";
+import { COMMAND_DEFS, MACRO_COMMANDS, MACRO_NOT_RECORDED, shortcutLabel } from "./commandDefs";
+import { mdCommand } from "./markdownView";
+import { allowedInReadView, effectiveMdView } from "../lib/mdView";
 import * as macros from "./macros";
 import { checkForUpdates } from "./updater";
 import { workspace } from "./workspace";
@@ -239,6 +241,9 @@ const handlers: Record<string, () => void | boolean | Promise<void | boolean>> =
   ...Object.fromEntries(COMMAND_DEFS.filter((c) => c.id.startsWith("tools.") && c.id !== "tools.panel").map((c) => c.id).map((id) => [id, () => import("./toolsCommands").then((m) => m.runTool(id))])),
   "tools.panel": () => togglePanel("tools"),
   "lang.userLanguages": async () => (await import("../ui/userLanguages")).openLanguagesSheet(),
+  "markdown.toggleRead": () => mdCommand("toggleRead"),
+  "markdown.toggleSplit": () => mdCommand("toggleSplit"),
+  "markdown.edit": () => mdCommand("edit"),
   "app.extensions": () => import("../ui/extensions").then((m) => m.openExtensionsSheet()),
   "app.settings": () => import("../ui/settings").then((m) => m.openSettings()),
   "app.checkUpdates": () => checkForUpdates(true),
@@ -259,6 +264,8 @@ export function runCommand(id: string): void {
   if (lastRun.id === id && now - lastRun.at < 80) return;
   lastRun = { id, at: now };
   if (workspace.active?.large && !LARGE_OK.test(id)) return void toast(t("large.notAvailable"), "info");
+  // The read view of a Markdown tab cannot be edited: commands that change the text are refused there.
+  if (effectiveMdView(workspace.active) === "read" && (isExtensionCommand(id) || !allowedInReadView(id))) return void toast(t("markdown.readOnly"), "info");
   if (isExtensionCommand(id)) {
     void import("../ext/host").then((m) => m.runExtensionCommand(id));
     return;
@@ -274,8 +281,7 @@ export function runCommand(id: string): void {
 
 export async function openPalette(): Promise<void> {
   const items = COMMAND_DEFS.filter((c) => c.id !== "view.palette").map((c) => {
-    const accel = accelFor(c, isMac);
-    return { label: t(`cmd.${c.id}`), shortcut: accel ? formatShortcut(accel, isMac) : undefined, value: c.id };
+    return { label: t(`cmd.${c.id}`), shortcut: shortcutLabel(c, isMac, formatShortcut), value: c.id };
   });
   for (const c of extensionCommands()) items.push({ label: c.title, shortcut: undefined, value: c.id });
   const id = await quickPick(items, t("palette.placeholder"));

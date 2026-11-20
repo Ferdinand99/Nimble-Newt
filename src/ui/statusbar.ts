@@ -1,10 +1,14 @@
 import { toggleRecording } from "../app/macros";
+import { setView } from "../app/markdownView";
 import { workspace } from "../app/workspace";
 import { recorder } from "../editor/macroRecorder";
 import { COMMON_ENCODINGS, EOLS } from "../lib/api";
 import { h } from "../lib/dom";
 import { t } from "../lib/i18n";
 import { getLanguage, LANGUAGES } from "../lib/languages";
+import { formatShortcut } from "../lib/logic";
+import { isMac } from "../lib/dom";
+import { isMarkdownDoc, MD_VIEWS, type MdView } from "../lib/mdView";
 import { promptNumber } from "./dialog";
 import { pickEncoding } from "./encodingPick";
 import { showMenu, type MenuEntry } from "./menu";
@@ -39,10 +43,33 @@ export function initStatusbar(): StatusHandles {
   const update = item("status-update", () => updateClick?.());
   update.hidden = true;
   let updateClick: (() => void) | undefined;
-  bar.append(pos, sel, rec, follow, h("span", { class: "spacer" }), update, indent, lang, enc, eol);
+  // Edit | Split | Read for Markdown tabs.
+  const mdKeys: Record<MdView, string> = { edit: "", split: `${formatShortcut("CmdOrCtrl+K", isMac)} V`, read: formatShortcut("CmdOrCtrl+Shift+V", isMac) };
+  const mdButtons = MD_VIEWS.map((v) => {
+    const b = h("button", { type: "button", "aria-pressed": "false", dataset: { view: v } }, t(`markdown.${v}`));
+    b.addEventListener("click", () => {
+      const d = workspace.active;
+      if (d) setView(d, v);
+    });
+    return b;
+  });
+  const md = h("div", { class: "segmented status-seg", role: "group", "aria-label": t("markdown.view"), hidden: true }, ...mdButtons);
+  bar.append(pos, sel, rec, follow, h("span", { class: "spacer" }), update, md, indent, lang, enc, eol);
+
+  const renderMd = () => {
+    const d = workspace.active;
+    md.hidden = !isMarkdownDoc(d);
+    if (!d || md.hidden) return;
+    for (const b of mdButtons) {
+      const v = b.dataset.view as MdView;
+      b.setAttribute("aria-pressed", String(d.mdView === v));
+      b.title = mdKeys[v] ? `${t(`markdown.${v}Title`)} (${mdKeys[v]})` : t(`markdown.${v}Title`);
+    }
+  };
 
   const render = () => {
     const d = workspace.active;
+    renderMd();
     if (!d) return;
     if (d.large?.viewer) {
       const v = d.large.viewer;

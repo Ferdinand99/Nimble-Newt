@@ -8,6 +8,7 @@ pub mod fileio;
 pub mod folder;
 pub mod hash;
 pub mod largefile;
+pub mod mdassets;
 pub mod search;
 pub mod session;
 pub mod update;
